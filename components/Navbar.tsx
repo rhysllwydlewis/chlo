@@ -72,7 +72,7 @@ export default function Navbar() {
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
         >
-          CHLO
+          Chlo
         </a>
 
         {/* Desktop nav */}

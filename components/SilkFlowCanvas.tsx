@@ -2,65 +2,97 @@
 
 import { useEffect, useRef } from 'react';
 
-interface Blob {
+interface Shape {
   x: number;
   y: number;
   vx: number;
   vy: number;
-  r: number;
-  color: string;
+  size: number;
+  rotation: number;
+  rotationSpeed: number;
+  sides: number; // 0 = circle, 3 = triangle, 4 = diamond, 6 = hexagon
   alpha: number;
+  pulsePhase: number;
+  pulseSpeed: number;
 }
 
-// Warm palette (no brown – used for text only)
-const PALETTE = [
-  { r: 231, g: 216, b: 198 }, // #E7D8C6 beige
-  { r: 201, g: 169, b: 131 }, // #C9A983 tan
-  { r: 247, g: 241, b: 231 }, // #F7F1E7 cream
-  { r: 255, g: 252, b: 247 }, // #FFFCF7 warm white
-  { r: 220, g: 200, b: 175 }, // mid beige
-  { r: 235, g: 225, b: 210 }, // light beige
+// Warm, very subtle palette
+const COLORS = [
+  '201,169,131', // #C9A983 tan
+  '231,216,198', // #E7D8C6 beige
+  '220,200,175', // mid beige
+  '189,155,120', // deeper tan
 ];
 
-function createBlobs(w: number, h: number): Blob[] {
-  const blobs: Blob[] = [];
-  const count = 6;
+function createShapes(w: number, h: number): Shape[] {
+  const shapes: Shape[] = [];
+  const count = 14;
+  const sideOptions = [0, 3, 4, 6]; // circle, triangle, diamond, hexagon
   for (let i = 0; i < count; i++) {
-    const c = PALETTE[i % PALETTE.length];
-    blobs.push({
+    shapes.push({
       x: Math.random() * w,
       y: Math.random() * h,
-      // Very slow drift — max ~18 px/s (velocity in px/s)
-      vx: (Math.random() - 0.5) * 18,
-      vy: (Math.random() - 0.5) * 18,
-      r: Math.min(w, h) * (0.3 + Math.random() * 0.35),
-      color: `${c.r},${c.g},${c.b}`,
-      alpha: 0.06 + Math.random() * 0.12,
+      vx: (Math.random() - 0.5) * 10,
+      vy: (Math.random() - 0.5) * 10,
+      size: 30 + Math.random() * 80,
+      rotation: Math.random() * Math.PI * 2,
+      rotationSpeed: (Math.random() - 0.5) * 0.2,
+      sides: sideOptions[Math.floor(Math.random() * sideOptions.length)],
+      alpha: 0.06 + Math.random() * 0.07,
+      pulsePhase: Math.random() * Math.PI * 2,
+      pulseSpeed: 0.3 + Math.random() * 0.5,
     });
   }
-  return blobs;
+  return shapes;
+}
+
+function drawPolygon(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  sides: number,
+  radius: number,
+  rotation: number,
+) {
+  if (sides === 0) {
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    return;
+  }
+  const step = (Math.PI * 2) / sides;
+  ctx.moveTo(x + radius * Math.cos(rotation), y + radius * Math.sin(rotation));
+  for (let i = 1; i <= sides; i++) {
+    ctx.lineTo(
+      x + radius * Math.cos(rotation + step * i),
+      y + radius * Math.sin(rotation + step * i),
+    );
+  }
 }
 
 function drawFrame(
   ctx: CanvasRenderingContext2D,
-  blobs: Blob[],
+  shapes: Shape[],
   w: number,
   h: number,
+  time: number,
 ) {
   ctx.fillStyle = '#F7F1E7';
   ctx.fillRect(0, 0, w, h);
 
-  for (const blob of blobs) {
-    const grad = ctx.createRadialGradient(
-      blob.x, blob.y, 0,
-      blob.x, blob.y, blob.r,
-    );
-    grad.addColorStop(0, `rgba(${blob.color},${blob.alpha})`);
-    grad.addColorStop(1, `rgba(${blob.color},0)`);
-    ctx.fillStyle = grad;
+  for (let i = 0; i < shapes.length; i++) {
+    const s = shapes[i];
+    const color = COLORS[i % COLORS.length];
+    // Gentle pulse on alpha
+    const pulse = 0.6 + 0.4 * Math.sin(time * s.pulseSpeed + s.pulsePhase);
+    const alpha = s.alpha * pulse;
+
+    ctx.save();
+    ctx.strokeStyle = `rgba(${color},${alpha})`;
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.arc(blob.x, blob.y, blob.r, 0, Math.PI * 2);
-    ctx.fill();
+    drawPolygon(ctx, s.x, s.y, s.sides, s.size, s.rotation);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.restore();
   }
 }
 
@@ -68,8 +100,9 @@ export default function SilkFlowCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const animRef = useRef<number | null>(null);
-  const blobsRef = useRef<Blob[]>([]);
+  const shapesRef = useRef<Shape[]>([]);
   const sizeRef = useRef({ w: 0, h: 0 });
+  const startTimeRef = useRef<number | null>(null);
   const lastTimeRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -97,20 +130,22 @@ export default function SilkFlowCanvas() {
 
     function update(dt: number) {
       const { w, h } = sizeRef.current;
-      for (const blob of blobsRef.current) {
-        blob.x += blob.vx * dt;
-        blob.y += blob.vy * dt;
-        // Wrap gently at edges
-        if (blob.x < -blob.r) blob.x = w + blob.r;
-        if (blob.x > w + blob.r) blob.x = -blob.r;
-        if (blob.y < -blob.r) blob.y = h + blob.r;
-        if (blob.y > h + blob.r) blob.y = -blob.r;
+      for (const shape of shapesRef.current) {
+        shape.x += shape.vx * dt;
+        shape.y += shape.vy * dt;
+        shape.rotation += shape.rotationSpeed * dt;
+        // Wrap at edges
+        if (shape.x < -shape.size * 2) shape.x = w + shape.size * 2;
+        if (shape.x > w + shape.size * 2) shape.x = -shape.size * 2;
+        if (shape.y < -shape.size * 2) shape.y = h + shape.size * 2;
+        if (shape.y > h + shape.size * 2) shape.y = -shape.size * 2;
       }
     }
 
     function startLoop() {
       if (animRef.current !== null) return;
       lastTimeRef.current = null;
+      startTimeRef.current = null;
       animRef.current = requestAnimationFrame(loop);
     }
 
@@ -122,28 +157,34 @@ export default function SilkFlowCanvas() {
     }
 
     function loop(time: number) {
+      if (startTimeRef.current === null) startTimeRef.current = time;
+      const elapsed = (time - startTimeRef.current) / 1000;
       const dt =
         lastTimeRef.current == null
           ? 16
           : Math.min(time - lastTimeRef.current, 50);
       lastTimeRef.current = time;
       update(dt / 1000);
-      drawFrame(ctx!, blobsRef.current, sizeRef.current.w, sizeRef.current.h);
+      drawFrame(ctx!, shapesRef.current, sizeRef.current.w, sizeRef.current.h, elapsed);
       animRef.current = requestAnimationFrame(loop);
     }
 
     setSize();
-    blobsRef.current = createBlobs(sizeRef.current.w, sizeRef.current.h);
-    drawFrame(ctx, blobsRef.current, sizeRef.current.w, sizeRef.current.h);
+    shapesRef.current = createShapes(sizeRef.current.w, sizeRef.current.h);
 
-    if (!prefersReducedMotion) {
+    if (prefersReducedMotion) {
+      // Draw a single static frame only
+      drawFrame(ctx, shapesRef.current, sizeRef.current.w, sizeRef.current.h, 0);
+    } else {
       startLoop();
     }
 
     const resizeObserver = new ResizeObserver(() => {
       setSize();
-      blobsRef.current = createBlobs(sizeRef.current.w, sizeRef.current.h);
-      drawFrame(ctx!, blobsRef.current, sizeRef.current.w, sizeRef.current.h);
+      shapesRef.current = createShapes(sizeRef.current.w, sizeRef.current.h);
+      if (prefersReducedMotion) {
+        drawFrame(ctx!, shapesRef.current, sizeRef.current.w, sizeRef.current.h, 0);
+      }
     });
     resizeObserver.observe(container);
 
@@ -156,22 +197,32 @@ export default function SilkFlowCanvas() {
     });
     intersectionObserver.observe(container);
 
+    const handleVisibility = () => {
+      if (document.hidden) {
+        stopLoop();
+      } else if (!prefersReducedMotion) {
+        startLoop();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
     return () => {
       stopLoop();
       resizeObserver.disconnect();
       intersectionObserver.disconnect();
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, []);
 
   return (
     <div ref={containerRef} className="absolute inset-0 overflow-hidden pointer-events-none">
       <canvas ref={canvasRef} className="absolute inset-0" />
-      {/* Vignette overlay — darkens edges to keep hero text readable */}
+      {/* Vignette overlay — softens edges to keep hero text readable */}
       <div
         className="absolute inset-0"
         style={{
           background:
-            'radial-gradient(ellipse at 50% 40%, transparent 45%, rgba(59,47,42,0.12) 100%)',
+            'radial-gradient(ellipse at 50% 40%, transparent 45%, rgba(59,47,42,0.08) 100%)',
         }}
       />
     </div>
