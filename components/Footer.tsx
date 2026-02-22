@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { useContact } from '@/components/ContactWidget';
 
@@ -18,9 +19,9 @@ export default function Footer() {
       <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
         <p className="text-sm text-chlo-muted">© 2026 Chlo. All rights reserved.</p>
         <div className="flex items-center gap-6 text-sm">
-          <a href="/legal" className="text-chlo-muted hover:text-chlo-brown transition-colors duration-200">
+          <Link href="/legal" className="text-chlo-muted hover:text-chlo-brown transition-colors duration-200">
             Legal Hub
-          </a>
+          </Link>
           <button
             type="button"
             onClick={openContact}
