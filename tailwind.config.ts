@@ -27,7 +27,7 @@ const config: Config = {
         'drift-medium': 'drift 15s infinite ease-in-out reverse',
         'drift-fast': 'drift 10s infinite ease-in-out',
         shimmer: 'shimmer 2.5s infinite',
-        'bounce-slow': 'bounce 2.5s infinite',
+        'bounce-slow': 'hero-bounce 2.5s infinite',
       },
       keyframes: {
         drift: {
@@ -39,6 +39,10 @@ const config: Config = {
         shimmer: {
           '0%': { transform: 'translateX(-100%)' },
           '100%': { transform: 'translateX(100%)' },
+        },
+        'hero-bounce': {
+          '0%, 100%': { transform: 'translateY(0)' },
+          '50%': { transform: 'translateY(8px)' },
         },
       },
     },

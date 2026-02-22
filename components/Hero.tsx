@@ -91,8 +91,9 @@ export default function Hero() {
         animate={{ opacity: 0.4 }}
         transition={{ duration: 1, delay: 1.8 }}
         className="absolute bottom-8 left-1/2 -translate-x-1/2 text-chlo-muted"
+        aria-hidden="true"
       >
-        <div style={{ animation: 'bounce 2.5s infinite' }}>
+        <div className="animate-bounce-slow motion-reduce:animate-none">
           <svg
             xmlns="http://www.w3.org/2000/svg"
             className="w-5 h-5"

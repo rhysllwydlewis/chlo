@@ -38,7 +38,7 @@ function createShapes(w: number, h: number): Shape[] {
       rotation: Math.random() * Math.PI * 2,
       rotationSpeed: (Math.random() - 0.5) * 0.2,
       sides: sideOptions[Math.floor(Math.random() * sideOptions.length)],
-      alpha: 0.025 + Math.random() * 0.045,
+      alpha: 0.06 + Math.random() * 0.07,
       pulsePhase: Math.random() * Math.PI * 2,
       pulseSpeed: 0.3 + Math.random() * 0.5,
     });
@@ -87,7 +87,7 @@ function drawFrame(
 
     ctx.save();
     ctx.strokeStyle = `rgba(${color},${alpha})`;
-    ctx.lineWidth = 1;
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
     drawPolygon(ctx, s.x, s.y, s.sides, s.size, s.rotation);
     ctx.closePath();
@@ -145,6 +145,7 @@ export default function SilkFlowCanvas() {
     function startLoop() {
       if (animRef.current !== null) return;
       lastTimeRef.current = null;
+      startTimeRef.current = null;
       animRef.current = requestAnimationFrame(loop);
     }
 
