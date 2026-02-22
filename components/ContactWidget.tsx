@@ -31,6 +31,7 @@ interface FormData {
   email: string;
   subject: string;
   message: string;
+  website: string;
 }
 
 interface FormErrors {
@@ -46,6 +47,7 @@ function ContactModal({ onClose }: { onClose: () => void }) {
     email: '',
     subject: 'General',
     message: '',
+    website: '',
   });
   const [errors, setErrors] = useState<FormErrors>({});
   const [loading, setLoading] = useState(false);
@@ -205,6 +207,17 @@ function ContactModal({ onClose }: { onClose: () => void }) {
             </div>
 
             <form onSubmit={handleSubmit} noValidate>
+              {/* Honeypot – hidden from real users, bots fill it in */}
+              <input
+                type="text"
+                name="website"
+                value={formData.website}
+                onChange={(e) => setFormData({ ...formData, website: e.target.value })}
+                tabIndex={-1}
+                aria-hidden="true"
+                autoComplete="off"
+                style={{ position: 'absolute', left: '-9999px', width: '1px', height: '1px', overflow: 'hidden' }}
+              />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
                 <div>
                   <label htmlFor="name" className="block text-xs font-medium text-chlo-muted uppercase tracking-wider mb-1.5">
