@@ -70,7 +70,6 @@ export default function SilkFlowCanvas() {
   const animRef = useRef<number | null>(null);
   const blobsRef = useRef<Blob[]>([]);
   const sizeRef = useRef({ w: 0, h: 0 });
-  const visibleRef = useRef(true);
   const lastTimeRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -109,16 +108,27 @@ export default function SilkFlowCanvas() {
       }
     }
 
-    function loop(time: number) {
-      if (visibleRef.current) {
-        const dt =
-          lastTimeRef.current == null
-            ? 16
-            : Math.min(time - lastTimeRef.current, 50);
-        lastTimeRef.current = time;
-        update(dt / 1000);
-        drawFrame(ctx!, blobsRef.current, sizeRef.current.w, sizeRef.current.h);
+    function startLoop() {
+      if (animRef.current !== null) return;
+      lastTimeRef.current = null;
+      animRef.current = requestAnimationFrame(loop);
+    }
+
+    function stopLoop() {
+      if (animRef.current !== null) {
+        cancelAnimationFrame(animRef.current);
+        animRef.current = null;
       }
+    }
+
+    function loop(time: number) {
+      const dt =
+        lastTimeRef.current == null
+          ? 16
+          : Math.min(time - lastTimeRef.current, 50);
+      lastTimeRef.current = time;
+      update(dt / 1000);
+      drawFrame(ctx!, blobsRef.current, sizeRef.current.w, sizeRef.current.h);
       animRef.current = requestAnimationFrame(loop);
     }
 
@@ -127,7 +137,7 @@ export default function SilkFlowCanvas() {
     drawFrame(ctx, blobsRef.current, sizeRef.current.w, sizeRef.current.h);
 
     if (!prefersReducedMotion) {
-      animRef.current = requestAnimationFrame(loop);
+      startLoop();
     }
 
     const resizeObserver = new ResizeObserver(() => {
@@ -138,14 +148,16 @@ export default function SilkFlowCanvas() {
     resizeObserver.observe(container);
 
     const intersectionObserver = new IntersectionObserver((entries) => {
-      if (entries.length > 0) {
-        visibleRef.current = entries[0].isIntersecting;
+      if (entries[0].isIntersecting) {
+        if (!prefersReducedMotion) startLoop();
+      } else {
+        stopLoop();
       }
     });
     intersectionObserver.observe(container);
 
     return () => {
-      if (animRef.current != null) cancelAnimationFrame(animRef.current);
+      stopLoop();
       resizeObserver.disconnect();
       intersectionObserver.disconnect();
     };
