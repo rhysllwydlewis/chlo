@@ -1,16 +1,18 @@
 import type { Metadata } from 'next';
 import './globals.css';
 
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://chlo.co.uk';
+
 export const metadata: Metadata = {
   title: 'Chlo - Curated Experiences',
   description:
     'Chlo brings together a growing collection of thoughtfully designed products and digital experiences. A home for modern brands.',
-  metadataBase: new URL('https://chlo.co.uk'),
+  metadataBase: new URL(siteUrl),
   openGraph: {
     title: 'Chlo - Curated Experiences',
     description:
       'Chlo brings together a growing collection of thoughtfully designed products and digital experiences. A home for modern brands.',
-    url: 'https://chlo.co.uk',
+    url: siteUrl,
     siteName: 'Chlo',
     type: 'website',
   },
