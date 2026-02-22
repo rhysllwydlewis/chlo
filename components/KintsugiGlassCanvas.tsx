@@ -81,6 +81,12 @@ interface FractureData {
   shards: Shard[];
 }
 
+/** Pre-built static (resize-dependent) canvas gradients to avoid per-frame allocation */
+interface StaticGrads {
+  centerLight: CanvasGradient;
+  vignette: CanvasGradient;
+}
+
 // ── Build fracture graph ──────────────────────────────────────────────────────
 function buildFracture(w: number, h: number): FractureData {
   const rand = mulberry32(SEED);
@@ -140,6 +146,7 @@ function buildFracture(w: number, h: number): FractureData {
     const edx = bx - ax;
     const edy = by - ay;
     const elen = Math.hypot(edx, edy);
+    if (elen < 0.001) return; // degenerate edge: sites too close, skip
     // Unit perpendicular for noise offset
     const pnx = -edy / elen;
     const pny = edx / elen;
@@ -234,6 +241,7 @@ function drawScene(
   ctx: CanvasRenderingContext2D,
   data: FractureData,
   noiseTex: HTMLCanvasElement,
+  staticGrads: StaticGrads,
   w: number,
   h: number,
   phase: number,
@@ -254,10 +262,7 @@ function drawScene(
   ctx.fillRect(0, 0, w, h);
 
   // ── 2. Centre radial lighting (warm white glow) ───────────────────────────
-  const rg = ctx.createRadialGradient(w * 0.5, h * 0.42, 0, w * 0.5, h * 0.42, w * 0.65);
-  rg.addColorStop(0, 'rgba(255,252,247,0.58)');
-  rg.addColorStop(1, 'rgba(247,241,231,0)');
-  ctx.fillStyle = rg;
+  ctx.fillStyle = staticGrads.centerLight;
   ctx.fillRect(0, 0, w, h);
 
   const { edges, shards } = data;
@@ -443,17 +448,7 @@ function drawScene(
   }
 
   // ── 8. Vignette overlay ───────────────────────────────────────────────────
-  const vg = ctx.createRadialGradient(
-    w / 2,
-    h / 2,
-    Math.min(w, h) * 0.28,
-    w / 2,
-    h / 2,
-    Math.hypot(w, h) / 2,
-  );
-  vg.addColorStop(0, 'rgba(59,47,42,0)');
-  vg.addColorStop(1, 'rgba(59,47,42,0.14)');
-  ctx.fillStyle = vg;
+  ctx.fillStyle = staticGrads.vignette;
   ctx.fillRect(0, 0, w, h);
 }
 
@@ -463,9 +458,11 @@ export default function KintsugiGlassCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
   const startTimeRef = useRef<number | null>(null);
+  const lastTimeRef = useRef<number | null>(null);
   const sizeRef = useRef({ w: 0, h: 0 });
   const fractureRef = useRef<FractureData | null>(null);
   const noiseTexRef = useRef<HTMLCanvasElement | null>(null);
+  const staticGradsRef = useRef<StaticGrads | null>(null);
   // Raw pointer position in canvas-local pixels
   const ptrRef = useRef({ x: 0, y: 0 });
   // Smoothed pointer (EMA) used for rendering
@@ -498,6 +495,20 @@ export default function KintsugiGlassCanvas() {
       sizeRef.current = { w, h };
       // Rebuild fracture graph — deterministic with fixed seed
       fractureRef.current = buildFracture(w, h);
+      // Build static (resize-dependent) gradients — cached to avoid per-frame allocation
+      const centerLight = ctx!.createRadialGradient(
+        w * 0.5, h * 0.42, 0,
+        w * 0.5, h * 0.42, w * 0.65,
+      );
+      centerLight.addColorStop(0, 'rgba(255,252,247,0.58)');
+      centerLight.addColorStop(1, 'rgba(247,241,231,0)');
+      const vignette = ctx!.createRadialGradient(
+        w / 2, h / 2, Math.min(w, h) * 0.28,
+        w / 2, h / 2, Math.hypot(w, h) / 2,
+      );
+      vignette.addColorStop(0, 'rgba(59,47,42,0)');
+      vignette.addColorStop(1, 'rgba(59,47,42,0.14)');
+      staticGradsRef.current = { centerLight, vignette };
       // Centre the pointer for initial specular position
       ptrRef.current = { x: w / 2, y: h / 2 };
       smoothPtrRef.current = { x: w / 2, y: h / 2 };
@@ -506,6 +517,7 @@ export default function KintsugiGlassCanvas() {
     function startLoop() {
       if (rafRef.current !== null) return;
       startTimeRef.current = null;
+      lastTimeRef.current = null;
       rafRef.current = requestAnimationFrame(loop);
     }
 
@@ -521,17 +533,24 @@ export default function KintsugiGlassCanvas() {
       const elapsed = (time - startTimeRef.current) / 1000;
       const phase = (elapsed % CYCLE_SECS) / CYCLE_SECS;
 
-      // Smooth pointer towards raw target (exponential moving average)
+      // Frame-rate-independent EMA: alpha scales with dt so 60 fps and 30 fps
+      // feel identical (at 60 fps dt≈16.67 ms → alpha≈SMOOTH_FACTOR).
+      const dt = lastTimeRef.current === null ? 16.67 : Math.min(time - lastTimeRef.current, 50);
+      lastTimeRef.current = time;
+      const alpha = 1 - Math.pow(1 - SMOOTH_FACTOR, dt / 16.67);
+
+      // Smooth pointer towards raw target
       const sp = smoothPtrRef.current;
       const tp = ptrRef.current;
-      sp.x += (tp.x - sp.x) * SMOOTH_FACTOR;
-      sp.y += (tp.y - sp.y) * SMOOTH_FACTOR;
+      sp.x += (tp.x - sp.x) * alpha;
+      sp.y += (tp.y - sp.y) * alpha;
 
       const { w, h } = sizeRef.current;
       const fr = fractureRef.current;
       const nt = noiseTexRef.current;
-      if (fr && nt) {
-        drawScene(ctx!, fr, nt, w, h, phase, sp.x, sp.y, elapsed);
+      const sg = staticGradsRef.current;
+      if (fr && nt && sg) {
+        drawScene(ctx!, fr, nt, sg, w, h, phase, sp.x, sp.y, elapsed);
       }
 
       rafRef.current = requestAnimationFrame(loop);
@@ -541,9 +560,10 @@ export default function KintsugiGlassCanvas() {
       const { w, h } = sizeRef.current;
       const fr = fractureRef.current;
       const nt = noiseTexRef.current;
-      if (fr && nt) {
+      const sg = staticGradsRef.current;
+      if (fr && nt && sg) {
         // Phase 0.35 — cracks visible + gold seams, no shard separation
-        drawScene(ctx!, fr, nt, w, h, 0.35, w / 2, h / 2, 0);
+        drawScene(ctx!, fr, nt, sg, w, h, 0.35, w / 2, h / 2, 0);
       }
     }
 
@@ -615,7 +635,7 @@ export default function KintsugiGlassCanvas() {
   }, []);
 
   return (
-    <div ref={containerRef} className="absolute inset-0 overflow-hidden pointer-events-none">
+    <div ref={containerRef} className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
       <canvas ref={canvasRef} className="absolute inset-0" />
     </div>
   );
