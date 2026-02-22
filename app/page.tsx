@@ -1,5 +1,3 @@
-'use client';
-
 import { ContactProvider } from '@/components/ContactWidget';
 import Navbar from '@/components/Navbar';
 import Hero from '@/components/Hero';

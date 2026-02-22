@@ -9,7 +9,8 @@ export default function Footer() {
   return (
     <motion.footer
       initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
+      whileInView={{ opacity: 1 }}
+      viewport={{ once: true }}
       transition={{ duration: 0.8 }}
       className="py-12 px-6"
       style={{ backgroundColor: '#FFFCF7', borderTop: '1px solid #E7D8C6' }}

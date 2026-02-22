@@ -55,6 +55,11 @@ function ContactModal({ onClose }: { onClose: () => void }) {
 
   useEffect(() => {
     firstInputRef.current?.focus();
+    // Lock body scroll while modal is open
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = '';
+    };
   }, []);
 
   useEffect(() => {
@@ -131,9 +136,13 @@ function ContactModal({ onClose }: { onClose: () => void }) {
           backgroundColor: '#FFFCF7',
           border: '1px solid #E7D8C6',
         }}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={success ? 'contact-success-title' : 'contact-modal-title'}
         onClick={(e) => e.stopPropagation()}
       >
         <button
+          type="button"
           onClick={onClose}
           className="absolute top-4 right-4 text-chlo-muted hover:text-chlo-brown transition"
           aria-label="Close modal"
@@ -173,7 +182,7 @@ function ContactModal({ onClose }: { onClose: () => void }) {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
             </motion.div>
-            <h3 className="text-xl font-semibold text-chlo-brown mb-2" style={{ fontFamily: 'var(--font-playfair)' }}>
+            <h3 className="text-xl font-semibold text-chlo-brown mb-2" id="contact-success-title" style={{ fontFamily: 'var(--font-playfair)' }}>
               Message Sent
             </h3>
             <p className="text-sm text-chlo-muted">
@@ -184,6 +193,7 @@ function ContactModal({ onClose }: { onClose: () => void }) {
           <>
             <div className="mb-6">
               <h2
+                id="contact-modal-title"
                 className="text-2xl font-semibold text-chlo-brown"
                 style={{ fontFamily: 'var(--font-playfair)' }}
               >
@@ -262,7 +272,7 @@ function ContactModal({ onClose }: { onClose: () => void }) {
                   placeholder="Tell us about your enquiry..."
                   value={formData.message}
                   onChange={(e) => setFormData({ ...formData, message: e.target.value })}
-                  className={errors.message ? errorInputClass : inputClass}
+                  className={`${errors.message ? errorInputClass : inputClass} resize-none`}
                 />
                 {errors.message && <p className="text-xs text-red-500 mt-1">{errors.message}</p>}
               </div>

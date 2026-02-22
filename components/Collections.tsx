@@ -62,7 +62,7 @@ export default function Collections() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-16">
           {collections.map((item, i) => (
             <motion.div
-              key={i}
+              key={`${item.name}-${i}`}
               initial={{ y: 40, opacity: 0 }}
               whileInView={{ y: 0, opacity: 1 }}
               viewport={{ once: true }}
