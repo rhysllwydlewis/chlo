@@ -2,12 +2,12 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Chlo — Curated Brands & Experiences',
+  title: 'Chlo - Curated Experiences',
   description:
     'Chlo brings together a growing collection of thoughtfully designed products and digital experiences. A home for modern brands.',
   metadataBase: new URL('https://chlo.co.uk'),
   openGraph: {
-    title: 'Chlo — Curated Brands & Experiences',
+    title: 'Chlo - Curated Experiences',
     description:
       'Chlo brings together a growing collection of thoughtfully designed products and digital experiences. A home for modern brands.',
     url: 'https://chlo.co.uk',
