@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import SilkFlowCanvas from './SilkFlowCanvas';
+import KintsugiGlassCanvas from './KintsugiGlassCanvas';
 import { useContact } from '@/components/ContactWidget';
 
 export default function Hero() {
@@ -19,7 +19,7 @@ export default function Hero() {
       className="relative min-h-screen flex items-center justify-center overflow-hidden"
       style={{ backgroundColor: '#F7F1E7' }}
     >
-      <SilkFlowCanvas />
+      <KintsugiGlassCanvas />
 
       <div className="relative z-10 flex flex-col items-center text-center px-6 max-w-3xl mx-auto">
         <motion.span
