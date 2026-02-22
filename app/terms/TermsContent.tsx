@@ -40,6 +40,21 @@ const sections = [
     title: 'Governing law',
     content: 'These terms are governed by the laws of England and Wales.',
   },
+  {
+    title: 'Contact',
+    content: (
+      <>
+        For any questions about these terms, please email us at{' '}
+        <a
+          href="mailto:hello@chlo.co.uk"
+          className="underline hover:text-chlo-brown transition-colors duration-200"
+        >
+          hello@chlo.co.uk
+        </a>
+        .
+      </>
+    ),
+  },
 ];
 
 export default function TermsContent() {
@@ -114,30 +129,6 @@ export default function TermsContent() {
                 <p className="text-chlo-muted leading-relaxed">{section.content}</p>
               </motion.section>
             ))}
-
-            <motion.section
-              initial={{ y: 20, opacity: 0 }}
-              whileInView={{ y: 0, opacity: 1 }}
-              viewport={{ once: true, amount: 0.3 }}
-              transition={{ duration: 0.6 }}
-            >
-              <h2
-                className="text-lg font-semibold mb-3"
-                style={{ color: '#3B2F2A', fontFamily: 'var(--font-playfair)' }}
-              >
-                Contact
-              </h2>
-              <p className="text-chlo-muted leading-relaxed">
-                For any questions about these terms, please email us at{' '}
-                <a
-                  href="mailto:hello@chlo.co.uk"
-                  className="underline hover:text-chlo-brown transition-colors duration-200"
-                >
-                  hello@chlo.co.uk
-                </a>
-                .
-              </p>
-            </motion.section>
           </div>
         </div>
       </main>
