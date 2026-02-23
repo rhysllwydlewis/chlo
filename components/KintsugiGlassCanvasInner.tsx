@@ -8,19 +8,23 @@ import {
   useState,
   type RefObject,
 } from 'react';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { Sparkles } from '@react-three/drei';
+import { Canvas, useFrame } from '@react-three/fiber';
+import { Sparkles, Line } from '@react-three/drei';
 import { EffectComposer, Bloom, Vignette, Noise } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import { Delaunay } from 'd3-delaunay';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const SEED = 0xb3ef7a1c;
-const IMPACT_X = 0.52;   // slightly off-centre impact point (normalised 0..1)
+const IMPACT_X = 0.52;        // off-centre fracture impact point (0..1)
 const IMPACT_Y = 0.46;
-const NUM_SITES = 60;     // Voronoi seed points
-const MAX_SHARD_DRIFT = 0.018; // maximum Z-drift for shard separation
-const SMOOTH_FACTOR = 0.06;   // EMA smoothing for pointer tracking
+const NUM_SITES = 60;          // Voronoi seed count
+const MAX_SHARD_DRIFT = 0.018; // max Z separation on cursor hover
+const SMOOTH_FACTOR = 0.06;    // EMA smoothing coefficient for cursor tracking
+
+// Pre-computed gold colour endpoints (used for shimmer interpolation)
+const GOLD_BASE = new THREE.Color(0.79, 0.62, 0.29); // warm champagne
+const GOLD_HIGH = new THREE.Color(0.97, 0.92, 0.80); // near-white peak
 
 // ── Seeded PRNG (mulberry32) ──────────────────────────────────────────────────
 function mulberry32(a: number): () => number {
@@ -33,53 +37,40 @@ function mulberry32(a: number): () => number {
   };
 }
 
-// ── Shard data ────────────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
 interface ShardInfo {
-  polygon: [number, number][];   // clipped Voronoi cell vertices
-  centroid: [number, number];
-  /** Unit outward direction from fracture impact point */
-  outwardDx: number;
-  outwardDy: number;
-  /** 0..1 – distance fraction from impact point */
-  distFrac: number;
+  polygon:    [number, number][];
+  centroid:   [number, number];
+  outwardDx:  number;
+  outwardDy:  number;
+  distFrac:   number;
 }
 
-// ── Build Voronoi shards ──────────────────────────────────────────────────────
+// ── Build radial Voronoi fracture ─────────────────────────────────────────────
 function buildShards(w: number, h: number): ShardInfo[] {
   const rand = mulberry32(SEED);
-
-  // Radial fracture: dense near impact point, sparser at edges
   const impX = IMPACT_X * w;
   const impY = IMPACT_Y * h;
   const points: [number, number][] = [];
 
-  // Pack sites in a radial distribution: closer to impact = denser
   for (let i = 0; i < NUM_SITES; i++) {
     const angle = rand() * Math.PI * 2;
-    // Use sqrt to bias towards centre; 0.58 caps the radius at ~58% of the canvas
-    // diagonal so all seeds land well within the Voronoi clipping bounds.
+    // sqrt-bias → denser near impact; 0.58 keeps seeds well inside clip bounds
     const r = Math.sqrt(rand()) * Math.hypot(w, h) * 0.58;
-    const jx = impX + Math.cos(angle) * r;
-    const jy = impY + Math.sin(angle) * r;
-    // Clamp inside canvas with margin
     points.push([
-      Math.max(5, Math.min(w - 5, jx + (rand() - 0.5) * 40)),
-      Math.max(5, Math.min(h - 5, jy + (rand() - 0.5) * 40)),
+      Math.max(5, Math.min(w - 5, impX + Math.cos(angle) * r + (rand() - 0.5) * 40)),
+      Math.max(5, Math.min(h - 5, impY + Math.sin(angle) * r + (rand() - 0.5) * 40)),
     ]);
   }
 
-  // Voronoi tessellation clipped to [0,0,w,h]
-  const delaunay = Delaunay.from(points);
-  const voronoi = delaunay.voronoi([0, 0, w, h]);
-
+  const voronoi  = Delaunay.from(points).voronoi([0, 0, w, h]);
   const halfDiag = Math.hypot(w, h) / 2;
-
   const shards: ShardInfo[] = [];
+
   for (let i = 0; i < NUM_SITES; i++) {
     const polygon = Array.from(voronoi.cellPolygon(i) ?? []) as [number, number][];
     if (polygon.length < 3) continue;
 
-    // Compute centroid
     let cx = 0, cy = 0;
     for (const [px, py] of polygon) { cx += px; cy += py; }
     cx /= polygon.length;
@@ -87,22 +78,21 @@ function buildShards(w: number, h: number): ShardInfo[] {
 
     const dx = cx - impX;
     const dy = cy - impY;
-    const d = Math.hypot(dx, dy) || 0.001;
+    const d  = Math.hypot(dx, dy) || 0.001;
 
     shards.push({
       polygon,
       centroid: [cx, cy],
       outwardDx: dx / d,
       outwardDy: dy / d,
-      distFrac: Math.min(1, d / halfDiag),
+      distFrac:  Math.min(1, d / halfDiag),
     });
   }
-
   return shards;
 }
 
-// ── Convert canvas (px) coords to NDC-like Three.js units ────────────────────
-// We map the full canvas to a [-aspect, aspect] × [-1, 1] plane at Z=0.
+// ── Coordinate conversion: canvas px → Three.js world units ──────────────────
+// Full canvas maps to [−aspect, aspect] × [−1, 1].
 function toThree(
   x: number, y: number,
   w: number, h: number,
@@ -114,62 +104,67 @@ function toThree(
   ];
 }
 
-// ── Build shard mesh geometry (ShapeGeometry) ─────────────────────────────────
-function buildShardGeometry(
-  polygon: [number, number][],
-  w: number,
-  h: number,
-  aspect: number,
-): THREE.ShapeGeometry {
-  const shape = new THREE.Shape();
-  const [x0, y0] = toThree(polygon[0][0], polygon[0][1], w, h, aspect);
-  shape.moveTo(x0, y0);
-  for (let i = 1; i < polygon.length; i++) {
-    const [xi, yi] = toThree(polygon[i][0], polygon[i][1], w, h, aspect);
-    shape.lineTo(xi, yi);
-  }
-  shape.closePath();
-  return new THREE.ShapeGeometry(shape, 1);
+// ── Per-shard geometry data ───────────────────────────────────────────────────
+interface ShardGeom {
+  shardGeo:   THREE.ShapeGeometry;
+  /** Voronoi polygon as 3-D points (Z = 0.002, above shard surface) for Line rendering */
+  seamPoints: [number, number, number][];
+  outwardDx:  number;
+  outwardDy:  number;
+  distFrac:   number;
 }
 
-// ── Build gold seam EdgesGeometry for a shard ─────────────────────────────────
-function buildSeamGeometry(
-  polygon: [number, number][],
-  w: number,
-  h: number,
+function buildShardGeometries(
+  shards: ShardInfo[],
+  w: number, h: number,
   aspect: number,
-): THREE.BufferGeometry {
-  const pts3: number[] = [];
-  for (let i = 0; i < polygon.length - 1; i++) {
-    const [ax, ay] = toThree(polygon[i][0], polygon[i][1], w, h, aspect);
-    const [bx, by] = toThree(polygon[i + 1][0], polygon[i + 1][1], w, h, aspect);
-    pts3.push(ax, ay, 0.001, bx, by, 0.001);
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(pts3, 3));
-  return geo;
+): ShardGeom[] {
+  return shards.map((s) => {
+    // Ceramic mesh shape
+    const shape = new THREE.Shape();
+    const [x0, y0] = toThree(s.polygon[0][0], s.polygon[0][1], w, h, aspect);
+    shape.moveTo(x0, y0);
+    for (let i = 1; i < s.polygon.length; i++) {
+      const [xi, yi] = toThree(s.polygon[i][0], s.polygon[i][1], w, h, aspect);
+      shape.lineTo(xi, yi);
+    }
+    shape.closePath();
+
+    // Seam outline: unique polygon vertices (d3-delaunay closes with first=last so slice(0,-1)).
+    // Append the first vertex again to manually close the Line polyline.
+    const uniqueVerts = s.polygon.slice(0, -1);
+    const seamPoints: [number, number, number][] = uniqueVerts.map(([px, py]) => {
+      const [tx, ty] = toThree(px, py, w, h, aspect);
+      return [tx, ty, 0.002]; // slightly above shard surface
+    });
+    if (seamPoints.length > 0) seamPoints.push(seamPoints[0]); // close loop
+
+    return {
+      shardGeo:  new THREE.ShapeGeometry(shape, 1),
+      seamPoints,
+      outwardDx: s.outwardDx,
+      outwardDy: s.outwardDy,
+      distFrac:  s.distFrac,
+    };
+  });
 }
 
-// ── Pointer tracker (world-space) ─────────────────────────────────────────────
+// ── Pointer tracker ────────────────────────────────────────────────────────────
 interface PointerState {
-  raw: THREE.Vector2;
-  smooth: THREE.Vector2;
+  /** Normalised device pointer position: x/y in −1..1. Updated each pointermove. */
+  pos: THREE.Vector2;
 }
 
 function usePointer(containerRef: RefObject<HTMLDivElement | null>): PointerState {
-  const state = useRef<PointerState>({
-    raw: new THREE.Vector2(0, 0),
-    smooth: new THREE.Vector2(0, 0),
-  });
+  const state = useRef<PointerState>({ pos: new THREE.Vector2(0, 0) });
 
   useEffect(() => {
-    function onMove(e: Event) {
-      const pe = e as PointerEvent;
+    function onMove(e: PointerEvent) {
       const rect = containerRef.current?.getBoundingClientRect();
       if (!rect) return;
-      state.current.raw.set(
-        (pe.clientX - rect.left) / rect.width * 2 - 1,
-        -((pe.clientY - rect.top) / rect.height * 2 - 1),
+      state.current.pos.set(
+        (e.clientX - rect.left) / rect.width  * 2 - 1,
+        -((e.clientY - rect.top)  / rect.height * 2 - 1),
       );
     }
     window.addEventListener('pointermove', onMove);
@@ -179,54 +174,14 @@ function usePointer(containerRef: RefObject<HTMLDivElement | null>): PointerStat
   return state.current;
 }
 
-// ── Gold shader material ──────────────────────────────────────────────────────
-const GOLD_VERT = /* glsl */`
-  varying vec3 vNormal;
-  varying vec3 vWorldPos;
-  void main() {
-    vNormal = normalize(normalMatrix * normal);
-    vec4 wp = modelMatrix * vec4(position, 1.0);
-    vWorldPos = wp.xyz;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-  }
-`;
-
-const GOLD_FRAG = /* glsl */`
-  uniform vec3 uLightPos;
-  uniform vec3 uCameraPos;
-  uniform float uTime;
-  varying vec3 vNormal;
-  varying vec3 vWorldPos;
-
-  void main() {
-    vec3 lightDir = normalize(uLightPos - vWorldPos);
-    vec3 viewDir = normalize(uCameraPos - vWorldPos);
-    float diff = max(dot(vNormal, lightDir), 0.0);
-    float spec = pow(max(dot(reflect(-lightDir, vNormal), viewDir), 0.0), 32.0);
-
-    // Warm champagne gold palette
-    vec3 baseGold = vec3(0.79, 0.62, 0.29);
-    vec3 highlight = vec3(0.95, 0.90, 0.78);
-    vec3 col = mix(baseGold, highlight, spec * 0.8 + diff * 0.3);
-
-    // Subtle animated shimmer along the seam
-    float shimmer = sin(vWorldPos.x * 18.0 + uTime * 1.4) * 0.5 + 0.5;
-    col = mix(col, highlight, shimmer * 0.18);
-
-    gl_FragColor = vec4(col, 1.0);
-  }
-`;
-
-// ── Ceramic shard material ─────────────────────────────────────────────────────
+// ── Ceramic shard GLSL ─────────────────────────────────────────────────────────
+// Note: no vUv varying — unused, removed to keep the shader lean.
 const CERAMIC_VERT = /* glsl */`
   varying vec3 vNormal;
   varying vec3 vWorldPos;
-  varying vec2 vUv;
   void main() {
-    vNormal = normalize(normalMatrix * normal);
-    vec4 wp = modelMatrix * vec4(position, 1.0);
-    vWorldPos = wp.xyz;
-    vUv = uv;
+    vNormal   = normalize(normalMatrix * normal);
+    vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
 `;
@@ -235,178 +190,173 @@ const CERAMIC_FRAG = /* glsl */`
   uniform vec3 uLightPos;
   varying vec3 vNormal;
   varying vec3 vWorldPos;
-  varying vec2 vUv;
 
   float noise(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
   }
 
   void main() {
-    // Warm cream base with subtle SSS feel
-    vec3 base = vec3(0.969, 0.945, 0.906);
-    vec3 shadow = vec3(0.84, 0.80, 0.75);
+    vec3 base   = vec3(0.969, 0.945, 0.906); // warm cream #F7F1E7
+    vec3 shadow = vec3(0.82,  0.78,  0.73);  // shadow trough
 
-    vec3 lightDir = normalize(uLightPos - vWorldPos);
-    float ndl = max(dot(vNormal, lightDir), 0.0);
-    // Wrap-around diffuse for SSS-like softness
+    vec3  lightDir = normalize(uLightPos - vWorldPos);
+    float ndl      = max(dot(vNormal, lightDir), 0.0);
+    // Wrap-around diffuse — SSS-like softness (no hard terminator)
     float wrap = (ndl + 0.4) / 1.4;
+    float grain = noise(vWorldPos.xy * 220.0) * 0.028; // subtle ceramic grain
 
-    float grain = noise(vWorldPos.xy * 200.0) * 0.03;
-    vec3 col = mix(shadow, base, wrap) + grain;
-    gl_FragColor = vec4(col, 1.0);
+    gl_FragColor = vec4(mix(shadow, base, wrap) + grain, 1.0);
   }
 `;
 
-// ── Scene: shards + seams + lighting + particles ──────────────────────────────
+// ── KintsugiScene ──────────────────────────────────────────────────────────────
 interface SceneProps {
-  shards: ShardInfo[];
-  w: number;
-  h: number;
-  aspect: number;
+  shards:        ShardInfo[];
+  w:             number;
+  h:             number;
+  aspect:        number;
   reducedMotion: boolean;
-  pointer: PointerState;
+  pointer:       PointerState;
 }
 
 function KintsugiScene({ shards, w, h, aspect, reducedMotion, pointer }: SceneProps) {
-  const { camera } = useThree();
-  const lightRef = useRef<THREE.PointLight>(null);
-  const lightPosRef = useRef(new THREE.Vector3(0, 0, 1.5));
-  const shardGroupRef = useRef<THREE.Group>(null);
+  const lightRef   = useRef<THREE.PointLight>(null);
+  const lightPos   = useRef(new THREE.Vector3(0, 0, 1.5));
 
-  // Build per-shard geometry + refs
-  const shardMeshes = useMemo(() => {
-    return shards.map((s) => ({
-      geo: buildShardGeometry(s.polygon, w, h, aspect),
-      seamGeo: buildSeamGeometry(s.polygon, w, h, aspect),
-      outwardDx: s.outwardDx,
-      outwardDy: s.outwardDy,
-      distFrac: s.distFrac,
-    }));
-  }, [shards, w, h, aspect]);
+  // Build per-shard geometries — rebuilds only on resize
+  const geoms = useMemo(
+    () => buildShardGeometries(shards, w, h, aspect),
+    [shards, w, h, aspect],
+  );
 
-  // Shared shader uniforms
-  const goldUniforms = useRef({
-    uLightPos: { value: new THREE.Vector3(0, 0, 1.5) },
-    uCameraPos: { value: new THREE.Vector3(0, 0, 2) },
-    uTime: { value: 0 },
-  });
+  // ── Dispose old ShapeGeometry objects to prevent GPU memory leaks ────────────
+  const prevGeomsRef = useRef<ShardGeom[] | null>(null);
+  useEffect(() => {
+    const prev = prevGeomsRef.current;
+    prevGeomsRef.current = geoms;
+    // Dispose previous geometries (not the first mount)
+    if (prev !== null && prev !== geoms) {
+      prev.forEach((g) => g.shardGeo.dispose());
+    }
+    // Dispose on unmount
+    return () => {
+      geoms.forEach((g) => g.shardGeo.dispose());
+    };
+  }, [geoms]);
+
+  // Ceramic shader uniforms — single object shared across all shard materials
   const ceramicUniforms = useRef({
     uLightPos: { value: new THREE.Vector3(0, 0, 1.5) },
   });
 
-  // Shard mesh refs for per-frame Z animation
+  // Refs to Line2 objects for direct material colour mutation (no re-renders)
+  const seamRefs = useRef<(THREE.Object3D | null)[]>([]);
+  // Refs to ceramic mesh objects for Z-drift animation
   const meshRefs = useRef<(THREE.Mesh | null)[]>([]);
 
-  // Place camera
+  // Reset ref arrays when shard count changes (e.g. on resize)
   useEffect(() => {
-    camera.position.set(0, 0, 2);
-    (camera as THREE.PerspectiveCamera).fov = 60;
-    (camera as THREE.PerspectiveCamera).updateProjectionMatrix();
-  }, [camera]);
+    meshRefs.current = new Array(geoms.length).fill(null);
+    seamRefs.current = new Array(geoms.length).fill(null);
+  }, [geoms.length]);
 
-  useFrame((_, delta) => {
-    const dt = Math.min(delta * 1000, 50); // ms, capped
-    const alpha = 1 - Math.pow(1 - SMOOTH_FACTOR, dt / 16.67);
+  // ── Per-frame animation loop ─────────────────────────────────────────────────
+  useFrame(({ clock }, delta) => {
+    const dt    = Math.min(delta * 1000, 50); // cap at 50 ms (handles tab-switch jank)
+    const alpha = 1 - Math.pow(1 - SMOOTH_FACTOR, dt / 16.67); // frame-rate-independent EMA
+    const elapsed = clock.elapsedTime;
 
-    // Smooth light tracking
-    const targetX = pointer.raw.x * aspect * 0.9;
-    const targetY = pointer.raw.y * 0.9;
-    lightPosRef.current.x += (targetX - lightPosRef.current.x) * alpha;
-    lightPosRef.current.y += (targetY - lightPosRef.current.y) * alpha;
-
-    pointer.smooth.set(lightPosRef.current.x, lightPosRef.current.y);
+    // Smooth cursor-following for the point light
+    lightPos.current.x += (pointer.pos.x * aspect * 0.9 - lightPos.current.x) * alpha;
+    lightPos.current.y += (pointer.pos.y * 0.9          - lightPos.current.y) * alpha;
 
     if (lightRef.current) {
-      lightRef.current.position.set(
-        lightPosRef.current.x,
-        lightPosRef.current.y,
-        1.5,
-      );
+      lightRef.current.position.set(lightPos.current.x, lightPos.current.y, 1.5);
     }
-
-    // Update shader uniforms
-    goldUniforms.current.uLightPos.value.set(
-      lightPosRef.current.x,
-      lightPosRef.current.y,
-      1.5,
-    );
-    goldUniforms.current.uCameraPos.value.copy(camera.position);
-    goldUniforms.current.uTime.value += delta;
     ceramicUniforms.current.uLightPos.value.set(
-      lightPosRef.current.x,
-      lightPosRef.current.y,
-      1.5,
+      lightPos.current.x, lightPos.current.y, 1.5,
     );
 
-    // Magnetic shard separation (Z-axis drift towards cursor)
+    // Animate seam line colours — direct LineMaterial mutation (zero React overhead)
+    const cursorGleam =
+      Math.max(0, lightPos.current.x * 0.4 + lightPos.current.y * 0.3 + 0.6); // 0..~1.3
+    seamRefs.current.forEach((obj, i) => {
+      if (!obj) return;
+      // Stagger the shimmer phase so lines don't pulse in unison
+      const phase   = ((i * 0.137 + i * 0.073) % 1) * Math.PI * 2;
+      const shimmer = Math.sin(elapsed * 1.4 + phase) * 0.5 + 0.5;         // 0..1
+      const gleam   = Math.min(1, shimmer * 0.65 + cursorGleam * 0.35);    // 0..1
+
+      const mat = (obj as { material?: { color?: THREE.Color } }).material;
+      if (mat?.color instanceof THREE.Color) {
+        mat.color.setRGB(
+          GOLD_BASE.r + (GOLD_HIGH.r - GOLD_BASE.r) * gleam,
+          GOLD_BASE.g + (GOLD_HIGH.g - GOLD_BASE.g) * gleam,
+          GOLD_BASE.b + (GOLD_HIGH.b - GOLD_BASE.b) * gleam,
+        );
+      }
+    });
+
+    // Magnetic Z-drift — shards subtly repulse from the cursor
     if (!reducedMotion) {
       meshRefs.current.forEach((mesh, i) => {
-        if (!mesh || !shardMeshes[i]) return;
-        const { outwardDx, outwardDy, distFrac } = shardMeshes[i];
-        // Distance from pointer to shard outward direction
-        const dot = outwardDx * lightPosRef.current.x / (aspect || 1)
-          + outwardDy * lightPosRef.current.y;
-        const drift = Math.max(0, dot) * distFrac * MAX_SHARD_DRIFT;
-        const targetZ = drift;
+        if (!mesh || !geoms[i]) return;
+        const { outwardDx, outwardDy, distFrac } = geoms[i];
+        const dot  = outwardDx * lightPos.current.x / (aspect || 1)
+                   + outwardDy * lightPos.current.y;
+        const targetZ = Math.max(0, dot) * distFrac * MAX_SHARD_DRIFT;
         mesh.position.z += (targetZ - mesh.position.z) * alpha * 0.5;
       });
     }
   });
 
   return (
-    <group ref={shardGroupRef}>
-      {/* Ambient + Directional base lights */}
-      <ambientLight intensity={0.45} color="#FFF8F0" />
-      <directionalLight position={[0.5, 0.8, 1]} intensity={0.35} color="#FFF5E0" />
+    <>
+      {/* Base lighting rig */}
+      <ambientLight intensity={0.5} color="#FFF8F0" />
+      <directionalLight position={[0.5, 0.8, 1]} intensity={0.3} color="#FFF5E0" />
 
-      {/* Dynamic cursor point light — drives specular gleam */}
+      {/* Cursor-tracking specular point light */}
       <pointLight
         ref={lightRef}
         position={[0, 0, 1.5]}
-        intensity={reducedMotion ? 0.6 : 1.4}
+        intensity={reducedMotion ? 0.5 : 1.2}
         color="#FFE8B0"
-        distance={4}
+        distance={4.5}
         decay={2}
       />
 
-      {/* Ceramic shards */}
-      {shardMeshes.map((sm, i) => (
+      {/* ── Ceramic shards ─────────────────────────────────────────────────── */}
+      {geoms.map((g, i) => (
         <mesh
           key={`shard-${i}`}
           ref={(el) => { meshRefs.current[i] = el; }}
-          geometry={sm.geo}
+          geometry={g.shardGeo}
         >
           <shaderMaterial
             vertexShader={CERAMIC_VERT}
             fragmentShader={CERAMIC_FRAG}
-            uniforms={{
-              uLightPos: ceramicUniforms.current.uLightPos,
-            }}
+            uniforms={{ uLightPos: ceramicUniforms.current.uLightPos }}
           />
         </mesh>
       ))}
 
-      {/* Gold seam lines */}
-      {shardMeshes.map((sm, i) => (
-        <lineSegments
+      {/* ── Gold kintsugi seams ────────────────────────────────────────────── */}
+      {/* Line from @react-three/drei uses LineSegments2 / LineMaterial under    */}
+      {/* the hood, which supports sub-pixel → multi-pixel widths on all GPUs.  */}
+      {geoms.map((g, i) => (
+        <Line
           key={`seam-${i}`}
-          geometry={sm.seamGeo}
+          ref={(el: THREE.Object3D | null) => { seamRefs.current[i] = el; }}
+          points={g.seamPoints}
+          lineWidth={2.5}
+          color={new THREE.Color(GOLD_BASE.r, GOLD_BASE.g, GOLD_BASE.b)}
           renderOrder={1}
-        >
-          <shaderMaterial
-            vertexShader={GOLD_VERT}
-            fragmentShader={GOLD_FRAG}
-            uniforms={{
-              uLightPos: goldUniforms.current.uLightPos,
-              uCameraPos: goldUniforms.current.uCameraPos,
-              uTime: goldUniforms.current.uTime,
-            }}
-            depthWrite={false}
-          />
-        </lineSegments>
+          depthWrite={false}
+        />
       ))}
 
-      {/* Floating gold dust particles */}
+      {/* ── Floating gold dust particles ───────────────────────────────────── */}
       {!reducedMotion && (
         <Sparkles
           count={120}
@@ -418,7 +368,7 @@ function KintsugiScene({ shards, w, h, aspect, reducedMotion, pointer }: ScenePr
           noise={0.5}
         />
       )}
-    </group>
+    </>
   );
 }
 
@@ -426,49 +376,49 @@ function KintsugiScene({ shards, w, h, aspect, reducedMotion, pointer }: ScenePr
 function PostFX({ reducedMotion }: { reducedMotion: boolean }) {
   return (
     <EffectComposer>
-      {/* Selective bloom – makes gold seams & particles glow */}
+      {/*
+        Bloom — threshold 0.62 sits just above the ceramic surface luminance
+        peak (≈0.58 in lit areas with ACES roll-off) but below GOLD_HIGH (≈0.91).
+        This ensures only the gold seams glow; the cream ceramic stays crisp.
+        Intensity 0.75 gives a warm gold halo without blowing out the scene.
+      */}
       <Bloom
-        intensity={reducedMotion ? 0.2 : 0.65}
-        luminanceThreshold={0.55}
-        luminanceSmoothing={0.4}
+        intensity={reducedMotion ? 0.25 : 0.75}
+        luminanceThreshold={0.62}
+        luminanceSmoothing={0.5}
         mipmapBlur
       />
-      {/* Film grain – GPU-based, always mounted; opacity zero when reduced motion */}
+      {/* Film grain — GPU-based; opacity driven to zero when motion is reduced */}
       <Noise opacity={reducedMotion ? 0 : 0.032} />
-      {/* Vignette */}
-      <Vignette
-        offset={0.38}
-        darkness={0.48}
-        eskil={false}
-      />
+      {/* Vignette — darkens edges for editorial depth */}
+      <Vignette offset={0.38} darkness={0.48} eskil={false} />
     </EffectComposer>
   );
 }
 
-// ── Outer component ───────────────────────────────────────────────────────────
+// ── Shell component (SSR boundary) ────────────────────────────────────────────
 export default function KintsugiGlassCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const pointer = usePointer(containerRef);
+  const pointer      = usePointer(containerRef);
 
-  // Reactively track prefers-reduced-motion so changes while the page is open
-  // are respected immediately.
+  // Reactively track prefers-reduced-motion; updates immediately if user changes it
   const [reducedMotion, setReducedMotion] = useState(false);
   useEffect(() => {
-    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const mq      = window.matchMedia('(prefers-reduced-motion: reduce)');
     setReducedMotion(mq.matches);
     const handler = (e: MediaQueryListEvent) => setReducedMotion(e.matches);
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);
   }, []);
 
-  // Measure container to drive shard layout
+  // Measure container so shard layout matches true viewport size
   const [size, setSize] = useState({ w: 1440, h: 900 });
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     const ro = new ResizeObserver(([entry]) => {
       setSize({
-        w: entry.contentRect.width || 1440,
+        w: entry.contentRect.width  || 1440,
         h: entry.contentRect.height || 900,
       });
     });
@@ -479,7 +429,7 @@ export default function KintsugiGlassCanvas() {
 
   const aspect = size.w / size.h;
 
-  // Build Voronoi shards — recalculated only when size changes
+  // Build Voronoi fracture — recalculated only when viewport dimensions change
   const shards = useMemo(() => buildShards(size.w, size.h), [size.w, size.h]);
 
   return (
@@ -494,6 +444,12 @@ export default function KintsugiGlassCanvas() {
         gl={{ antialias: true, alpha: false }}
         style={{ background: '#F7F1E7' }}
         camera={{ position: [0, 0, 2], fov: 60 }}
+        frameloop={reducedMotion ? 'demand' : 'always'}
+        onCreated={({ gl }) => {
+          // Ensure the canvas element itself never captures pointer events
+          // (the outer div has pointer-events:none but that does not auto-apply to children)
+          gl.domElement.style.pointerEvents = 'none';
+        }}
       >
         <Suspense fallback={null}>
           <KintsugiScene
