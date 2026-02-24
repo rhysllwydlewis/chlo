@@ -9,6 +9,11 @@ const CRACK_SEGS = 6; // polyline segments per crack edge
 const MAX_CRACK_SEP = 7; // max shard separation pixels
 const MAX_PARALLAX = 4; // max parallax pixels from pointer
 const SMOOTH_FACTOR = 0.055; // pointer smooth lerp per frame
+const SHIMMER_BASE = 0.82;
+const SHIMMER_SPEED = 2.2;
+const SHIMMER_PHASE_A = 0.137;
+const SHIMMER_PHASE_B = 0.073;
+const SHIMMER_AMPLITUDE = 0.3;
 
 // ── Seeded PRNG (mulberry32) ──────────────────────────────────────────────────
 function mulberry32(a: number): () => number {
@@ -62,6 +67,7 @@ interface Edge {
   pts: Float32Array; // flat [x0,y0, x1,y1, …] — (CRACK_SEGS+1)*2 values
   siteA: number;
   siteB: number;
+  widthMultiplier: number;
   midX: number;
   midY: number;
   /** 0 = fully inside calm-center zone, 1 = full intensity at edges */
@@ -85,6 +91,7 @@ interface FractureData {
 interface StaticGrads {
   centerLight: CanvasGradient;
   vignette: CanvasGradient;
+  noisePattern: CanvasPattern | null;
 }
 
 // ── Build fracture graph ──────────────────────────────────────────────────────
@@ -171,7 +178,8 @@ function buildFracture(w: number, h: number): FractureData {
     // Calm-center mask: 0 in inner ~18%, ramps to 1 by ~63% radius
     const centerFactor = clamp(smoothstep(clamp((midDist - 0.18) / 0.45, 0, 1)), 0, 1);
 
-    edges.push({ pts, siteA: a, siteB: b, midX, midY, centerFactor });
+    const widthMultiplier = 0.72 + (((ihash(a, b) & 1023) / 1023) * 0.9);
+    edges.push({ pts, siteA: a, siteB: b, widthMultiplier, midX, midY, centerFactor });
   }
 
   for (let r = 0; r < rows; r++) {
@@ -240,7 +248,6 @@ function shardSep(p: number): number {
 function drawScene(
   ctx: CanvasRenderingContext2D,
   data: FractureData,
-  noiseTex: HTMLCanvasElement,
   staticGrads: StaticGrads,
   w: number,
   h: number,
@@ -304,13 +311,14 @@ function drawScene(
     ctx.save();
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    ctx.lineWidth = clamp(w / 1440, 0.5, 1.1) * 0.75;
+    const baseCrackWidth = clamp(w / 1440, 0.5, 1.1) * 0.72;
     ctx.strokeStyle = '#3B2F2A';
 
     for (let ei = 0; ei < edges.length; ei++) {
       const e = edges[ei];
       const alpha = ca * e.centerFactor * 0.17;
       if (alpha < 0.004) continue;
+      ctx.lineWidth = baseCrackWidth * e.widthMultiplier;
 
       const shA = shards[e.siteA];
       const shB = shards[e.siteB];
@@ -363,15 +371,24 @@ function drawScene(
     ctx.save();
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    ctx.lineWidth = clamp(w / 1440, 0.6, 1.2) * 1.3;
+    const baseGoldWidth = clamp(w / 1440, 0.6, 1.2) * 1.25;
     ctx.strokeStyle = goldGrad;
     ctx.shadowColor = 'rgba(201,169,131,0.38)';
     ctx.shadowBlur = 2.5;
 
     for (let ei = 0; ei < edges.length; ei++) {
       const e = edges[ei];
-      const alpha = sa * e.centerFactor;
+      const shimmer =
+        SHIMMER_BASE +
+        (Math.sin(
+          elapsed * SHIMMER_SPEED + (e.siteA * SHIMMER_PHASE_A + e.siteB * SHIMMER_PHASE_B) * Math.PI * 2,
+        ) *
+          0.5 +
+          0.5) *
+          SHIMMER_AMPLITUDE;
+      const alpha = sa * e.centerFactor * shimmer;
       if (alpha < 0.012) continue;
+      ctx.lineWidth = baseGoldWidth * e.widthMultiplier;
 
       const shA = shards[e.siteA];
       const shB = shards[e.siteB];
@@ -439,12 +456,9 @@ function drawScene(
   }
 
   // ── 7. Grain texture overlay (tiled 256×256, editorial feel) ─────────────
-  const nw = noiseTex.width;
-  const nh = noiseTex.height;
-  for (let ty = 0; ty < h; ty += nh) {
-    for (let tx = 0; tx < w; tx += nw) {
-      ctx.drawImage(noiseTex, tx, ty);
-    }
+  if (staticGrads.noisePattern) {
+    ctx.fillStyle = staticGrads.noisePattern;
+    ctx.fillRect(0, 0, w, h);
   }
 
   // ── 8. Vignette overlay ───────────────────────────────────────────────────
@@ -508,7 +522,8 @@ export default function KintsugiGlassCanvas() {
       );
       vignette.addColorStop(0, 'rgba(59,47,42,0)');
       vignette.addColorStop(1, 'rgba(59,47,42,0.14)');
-      staticGradsRef.current = { centerLight, vignette };
+      const noisePattern = noiseTexRef.current ? ctx!.createPattern(noiseTexRef.current, 'repeat') : null;
+      staticGradsRef.current = { centerLight, vignette, noisePattern };
       // Centre the pointer for initial specular position
       ptrRef.current = { x: w / 2, y: h / 2 };
       smoothPtrRef.current = { x: w / 2, y: h / 2 };
@@ -550,7 +565,7 @@ export default function KintsugiGlassCanvas() {
       const nt = noiseTexRef.current;
       const sg = staticGradsRef.current;
       if (fr && nt && sg) {
-        drawScene(ctx!, fr, nt, sg, w, h, phase, sp.x, sp.y, elapsed);
+        drawScene(ctx!, fr, sg, w, h, phase, sp.x, sp.y, elapsed);
       }
 
       rafRef.current = requestAnimationFrame(loop);
@@ -563,7 +578,7 @@ export default function KintsugiGlassCanvas() {
       const sg = staticGradsRef.current;
       if (fr && nt && sg) {
         // Phase 0.35 — cracks visible + gold seams, no shard separation
-        drawScene(ctx!, fr, nt, sg, w, h, 0.35, w / 2, h / 2, 0);
+        drawScene(ctx!, fr, sg, w, h, 0.35, w / 2, h / 2, 0);
       }
     }
 
