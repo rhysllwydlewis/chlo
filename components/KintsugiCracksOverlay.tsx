@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * KintsugiCracksOverlay
  *
@@ -25,7 +23,7 @@ export default function KintsugiCracksOverlay() {
         <svg
           xmlns="http://www.w3.org/2000/svg"
           viewBox="0 0 1440 900"
-          preserveAspectRatio="xMidYMid slice"
+          preserveAspectRatio="none"
           className="absolute inset-0 w-full h-full"
         >
           <defs>
