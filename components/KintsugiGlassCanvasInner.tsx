@@ -236,10 +236,7 @@ function CeramicShards({
     const outX = new Float32Array(n);
     const outY = new Float32Array(n);
     const distFrac = new Float32Array(n);
-    const assembledX = new Float32Array(n);
-    const assembledY = new Float32Array(n);
     const geometries: (THREE.BufferGeometry | null)[] = [];
-    
 
     for (let i = 0; i < n; i++) {
       const poly = polys[i];
@@ -268,11 +265,6 @@ function CeramicShards({
       geo.translate(0, 0, -SHARD_DEPTH * 0.5);
       geometries.push(geo);
 
-      // Assembled position = (0,0,0) — each mesh is offset by its site coords
-      // actually the shape is already in world coords, so assembled pos is (0,0,0)
-      assembledX[i] = 0;
-      assembledY[i] = 0;
-
       const sx = siteX[i] - cx0;
       const sy = siteY[i] - cy0;
       const d = Math.hypot(sx, sy) || 0.001;
@@ -283,14 +275,13 @@ function CeramicShards({
 
     const meshRefs: { current: THREE.Mesh | null }[] = Array.from({ length: n }, () => ({ current: null }));
 
-    return { shardData: { n, outX, outY, distFrac, assembledX, assembledY, geometries }, meshRefs };
+    return { shardData: { n, outX, outY, distFrac, geometries }, meshRefs };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vw, vh]);
 
   // Spring states (x offset, y offset, z offset per shard)
   const spPos = useRef<Float32Array | null>(null);
   const spVel = useRef<Float32Array | null>(null);
-  const startedRef = useRef(false);
   const clockRef = useRef(0);
 
   // Initialise spring positions to scattered state on first mount
@@ -308,7 +299,6 @@ function CeramicShards({
     }
     spPos.current = pos;
     spVel.current = vel;
-    startedRef.current = false;
     clockRef.current = 0;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shardData]);
@@ -525,7 +515,7 @@ function InlineEnvironment() {
 
 function lerp(a: number, b: number, t: number) { return a + (b - a) * t; }
 
-
+// ── Post-processing ───────────────────────────────────────────────────────────
 function PostProcessing() {
   return (
     <EffectComposer>
