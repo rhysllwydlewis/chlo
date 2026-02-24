@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import KintsugiGlassCanvas from './KintsugiGlassCanvas';
+import KintsugiCracksOverlay from './KintsugiCracksOverlay';
 import { useContact } from '@/components/ContactWidget';
 
 export default function Hero() {
@@ -20,19 +20,9 @@ export default function Hero() {
       style={{ backgroundColor: '#F7F1E7' }}
       aria-label="Hero"
     >
-      <KintsugiGlassCanvas />
+      <KintsugiCracksOverlay />
 
       <div className="relative z-10 flex flex-col items-center text-center px-6 max-w-3xl mx-auto">
-        <motion.span
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.1 }}
-          className="text-xs uppercase tracking-[0.3em] text-chlo-muted mb-8"
-          aria-hidden="true"
-        >
-          chlo.co.uk
-        </motion.span>
-
         <motion.h1
           initial={{ y: 30, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}

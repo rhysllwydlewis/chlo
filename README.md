@@ -25,7 +25,7 @@ A Next.js 15 (App Router) marketing / landing site for [chlo.co.uk](https://chlo
 Chlo is a home for modern brands — a curated group of digital and lifestyle experiences united by a commitment to quality, authenticity, and thoughtful design. This site is the public-facing marketing site built with Next.js 15 App Router, Tailwind CSS, and Framer Motion.
 
 **Key features:**
-- Animated kintsugi-glass canvas hero (pure 2D HTML Canvas, no WebGL dependencies)
+- Kintsugi SVG overlay hero (three crack tiers with layered gold gradients, subtle shimmer — no JS animation, no RAF)
 - Contact form with Postmark email delivery, honeypot spam protection, and rate limiting
 - Fully responsive, accessible, keyboard-navigable UI
 - Static-first architecture — all pages except the contact API and OG image are pre-rendered at build time
@@ -73,7 +73,7 @@ Browser ──► Next.js 15 (App Router, static export-compatible)
 │   ├── terms/                    Terms of use page
 │   │   ├── page.tsx
 │   │   └── TermsContent.tsx
-│   ├── globals.css               Global styles (Tailwind base, grain overlay, scroll behaviour)
+│   ├── globals.css               Global styles (Tailwind base, grain overlay, kintsugi shimmer, scroll behaviour)
 │   ├── layout.tsx                Root layout — fonts, metadata, viewport, OG tags
 │   ├── opengraph-image.tsx       Edge OG image (1200×630)
 │   ├── page.tsx                  Landing page — composes all sections
@@ -87,8 +87,8 @@ Browser ──► Next.js 15 (App Router, static export-compatible)
 │   ├── ContactWidget.tsx         Contact modal + context (ContactProvider, useContact)
 │   ├── DecorativeBackground.tsx  Animated blob background (used on hero fallback)
 │   ├── Footer.tsx                Site footer with dynamic year
-│   ├── Hero.tsx                  Full-screen hero with kintsugi canvas
-│   ├── KintsugiGlassCanvas.tsx   Pure 2D canvas animation (RAF, pointer parallax, seeded PRNG)
+│   ├── Hero.tsx                  Full-screen hero with kintsugi SVG overlay
+│   ├── KintsugiCracksOverlay.tsx SVG kintsugi crack overlay (3 tiers, gold gradients, shimmer)
 │   ├── LegalNav.tsx              Minimal nav for legal pages
 │   └── Navbar.tsx                Main navigation (scroll-aware, mobile hamburger)
 │
@@ -259,7 +259,7 @@ Use this checklist before merging any pull request into `main`:
 - [ ] Landing page renders correctly at all breakpoints (mobile 375px, tablet 768px, desktop 1280px+)
 - [ ] Navbar scroll behaviour works (transparent → frosted glass on scroll)
 - [ ] Mobile hamburger menu opens, closes, and navigates correctly
-- [ ] Hero canvas animation runs and responds to pointer movement
+- [ ] Hero kintsugi SVG overlay renders with gold cracks visible at all breakpoints (mobile 375 px, tablet 768 px, desktop 1280 px+)
 - [ ] "Contact" and "Explore" buttons in hero work correctly
 - [ ] Scroll-down chevron navigates to collections section
 - [ ] About, Collections, ContactBand scroll-triggered animations fire once
@@ -275,7 +275,7 @@ Use this checklist before merging any pull request into `main`:
 - [ ] All interactive elements have visible `:focus-visible` rings
 - [ ] All images and decorative SVGs have appropriate `alt` / `aria-hidden`
 - [ ] Screen reader: no meaningless text or unlabelled buttons
-- [ ] Motion: `prefers-reduced-motion` suppresses animations (hero canvas shows static frame; bounce arrow stops)
+- [ ] Motion: `prefers-reduced-motion` suppresses shimmer animation; static SVG cracks are always displayed
 - [ ] Colour contrast ratios meet WCAG AA for all text/background combinations
 
 ### SEO & metadata
@@ -293,8 +293,7 @@ Use this checklist before merging any pull request into `main`:
 ### Performance
 - [ ] First Load JS ≤ 200 kB per route
 - [ ] No synchronous external font blocking render (fonts use `display=swap`)
-- [ ] Hero canvas animation uses `cancelAnimationFrame` on unmount
-- [ ] Hero canvas pauses when tab is hidden or hero is scrolled off-screen
+- [ ] No layout shift introduced by shimmer div (CSS-only `translateX` animation on `absolute inset-0` element)
 
 ### Deployment
 - [ ] `NEXT_PUBLIC_SITE_URL` set to production domain in Railway variables
