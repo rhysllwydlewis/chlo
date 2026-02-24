@@ -295,16 +295,10 @@ function ContactModal({ onClose }: { onClose: () => void }) {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full rounded-lg py-3 text-sm font-medium tracking-wide transition-all duration-200 disabled:opacity-60 flex items-center justify-center gap-2"
+                className="w-full rounded-lg py-3 text-sm font-medium tracking-wide transition-all duration-200 disabled:opacity-60 hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-chlo-brown focus-visible:ring-offset-2 flex items-center justify-center gap-2"
                 style={{
                   backgroundColor: '#3B2F2A',
                   color: '#FFFCF7',
-                }}
-                onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#6E5B52';
-                }}
-                onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#3B2F2A';
                 }}
               >
                 {loading ? (

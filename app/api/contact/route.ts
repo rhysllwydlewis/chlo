@@ -27,6 +27,8 @@ function escapeHtml(str: string): string {
 // ---------------------------------------------------------------------------
 const RATE_LIMIT_WINDOW_MS = 60_000; // 1 minute
 const RATE_LIMIT_MAX = 3; // max submissions per IP per window
+const MESSAGE_MAX_LENGTH = 5000;
+const NAME_MAX_LENGTH = 200;
 
 const rateLimitMap = new Map<string, { count: number; windowStart: number }>();
 
@@ -83,6 +85,14 @@ export async function POST(request: NextRequest) {
     if (!emailRegex.test(body.email)) {
       return NextResponse.json(
         { error: 'Invalid email format' },
+        { status: 400 }
+      );
+    }
+
+    // Length validation – prevent oversized payloads
+    if (body.name.length > NAME_MAX_LENGTH || body.message.length > MESSAGE_MAX_LENGTH) {
+      return NextResponse.json(
+        { error: 'Input too long. Please shorten your message.' },
         { status: 400 }
       );
     }

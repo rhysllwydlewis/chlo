@@ -30,28 +30,8 @@ select option {
   color: #3B2F2A;
 }
 
-@keyframes drift {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  25% { transform: translate(20px, -30px) scale(1.05); }
-  50% { transform: translate(-15px, 15px) scale(0.95); }
-  75% { transform: translate(30px, 20px) scale(1.02); }
-}
-
-@keyframes shimmer {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
-}
-
-/* Smooth section-to-section transitions */
-section {
-  transition: background-color 0.4s ease;
-}
-
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
-  }
-  section {
-    transition: none;
   }
 }
