@@ -9,16 +9,22 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@react-three/drei": "^9.122.0",
+    "@react-three/fiber": "^9.5.0",
+    "@react-three/postprocessing": "^2.19.1",
     "framer-motion": "^11",
+    "maath": "^0.10.8",
     "next": "15.3.9",
     "postmark": "^4.0.7",
-    "react": "^18",
-    "react-dom": "^18"
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "three": "^0.183.1"
   },
   "devDependencies": {
     "@types/node": "^20",
-    "@types/react": "^18",
-    "@types/react-dom": "^18",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@types/three": "^0.183.0",
     "autoprefixer": "^10.0.1",
     "eslint": "^8",
     "eslint-config-next": "15.3.9",
