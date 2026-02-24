@@ -1,13 +1,22 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://chlo.co.uk';
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  themeColor: '#F7F1E7',
+};
 
 export const metadata: Metadata = {
   title: 'Chlo - Curated Experiences',
   description:
     'Chlo brings together a growing collection of thoughtfully designed products and digital experiences. A home for modern brands.',
   metadataBase: new URL(siteUrl),
+  alternates: {
+    canonical: siteUrl,
+  },
   openGraph: {
     title: 'Chlo - Curated Experiences',
     description:

@@ -31,7 +31,7 @@ export default function ContactBand() {
           <button
             type="button"
             onClick={openContact}
-            className="mt-10 px-10 py-4 rounded-full text-sm font-medium tracking-wide transition-all duration-200 hover:opacity-80"
+            className="mt-10 px-10 py-4 rounded-full text-sm font-medium tracking-wide transition-all duration-200 hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-chlo-brown focus-visible:ring-offset-2"
             style={{ backgroundColor: '#3B2F2A', color: '#FFFCF7' }}
           >
             Contact

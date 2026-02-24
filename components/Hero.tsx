@@ -18,6 +18,7 @@ export default function Hero() {
     <section
       className="relative min-h-screen flex items-center justify-center overflow-hidden"
       style={{ backgroundColor: '#F7F1E7' }}
+      aria-label="Hero"
     >
       <KintsugiGlassCanvas />
 
@@ -27,6 +28,7 @@ export default function Hero() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.1 }}
           className="text-xs uppercase tracking-[0.3em] text-chlo-muted mb-8"
+          aria-hidden="true"
         >
           chlo.co.uk
         </motion.span>
@@ -70,7 +72,7 @@ export default function Hero() {
           <button
             type="button"
             onClick={openContact}
-            className="px-8 py-3.5 rounded-full text-sm font-medium tracking-wide transition-all duration-200 hover:opacity-80"
+            className="px-8 py-3.5 rounded-full text-sm font-medium tracking-wide transition-all duration-200 hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-chlo-brown focus-visible:ring-offset-2 focus-visible:ring-offset-chlo-cream"
             style={{ backgroundColor: '#3B2F2A', color: '#FFFCF7' }}
           >
             Contact
@@ -78,7 +80,7 @@ export default function Hero() {
           <button
             type="button"
             onClick={handleExploreClick}
-            className="px-8 py-3.5 rounded-full text-sm font-medium tracking-wide border transition-all duration-200 hover:bg-chlo-beige"
+            className="px-8 py-3.5 rounded-full text-sm font-medium tracking-wide border transition-all duration-200 hover:bg-chlo-beige focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-chlo-brown focus-visible:ring-offset-2 focus-visible:ring-offset-chlo-cream"
             style={{ borderColor: '#3B2F2A', color: '#3B2F2A' }}
           >
             Explore
@@ -86,12 +88,14 @@ export default function Hero() {
         </motion.div>
       </div>
 
-      <motion.div
+      <motion.button
+        type="button"
+        onClick={handleExploreClick}
         initial={{ opacity: 0 }}
         animate={{ opacity: 0.4 }}
         transition={{ duration: 1, delay: 1.8 }}
-        className="absolute bottom-8 left-1/2 -translate-x-1/2 text-chlo-muted"
-        aria-hidden="true"
+        className="absolute bottom-8 left-1/2 -translate-x-1/2 text-chlo-muted hover:opacity-70 transition-opacity duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-chlo-brown rounded"
+        aria-label="Scroll to explore"
       >
         <div className="animate-bounce-slow motion-reduce:animate-none">
           <svg
@@ -105,7 +109,7 @@ export default function Hero() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
           </svg>
         </div>
-      </motion.div>
+      </motion.button>
     </section>
   );
 }
