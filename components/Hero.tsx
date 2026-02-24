@@ -1,11 +1,30 @@
 'use client';
 
-import { motion } from 'framer-motion';
-import KintsugiGlassCanvas from './KintsugiGlassCanvas';
+import { useRef } from 'react';
+import dynamic from 'next/dynamic';
+import { motion, useScroll, useMotionValueEvent } from 'framer-motion';
 import { useContact } from '@/components/ContactWidget';
+
+// R3F canvas uses WebGL — must be loaded client-side only
+const KintsugiGlassCanvas = dynamic(() => import('./KintsugiGlassCanvas'), {
+  ssr: false,
+});
 
 export default function Hero() {
   const { openContact } = useContact();
+  const sectionRef = useRef<HTMLElement>(null);
+
+  // Ref updated by framer-motion scroll subscriber — no re-renders on scroll
+  const scrollYRef = useRef(0);
+
+  const { scrollYProgress } = useScroll({
+    target: sectionRef,
+    offset: ['start start', 'end start'],
+  });
+
+  useMotionValueEvent(scrollYProgress, 'change', (v) => {
+    scrollYRef.current = v;
+  });
 
   const handleExploreClick = () => {
     const target = document.querySelector('#collections');
@@ -16,21 +35,13 @@ export default function Hero() {
 
   return (
     <section
+      ref={sectionRef}
       className="relative min-h-screen flex items-center justify-center overflow-hidden"
       style={{ backgroundColor: '#F7F1E7' }}
     >
-      <KintsugiGlassCanvas />
+      <KintsugiGlassCanvas scrollYRef={scrollYRef} />
 
       <div className="relative z-10 flex flex-col items-center text-center px-6 max-w-3xl mx-auto">
-        <motion.span
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.1 }}
-          className="text-xs uppercase tracking-[0.3em] text-chlo-muted mb-8"
-        >
-          chlo.co.uk
-        </motion.span>
-
         <motion.h1
           initial={{ y: 30, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
