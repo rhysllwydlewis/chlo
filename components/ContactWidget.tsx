@@ -42,6 +42,9 @@ interface FormErrors {
 }
 
 function ContactModal({ onClose }: { onClose: () => void }) {
+  // Note: the backdrop/overlay is rendered by ContactProvider so it gets a
+  // guaranteed top-level stacking context. This component renders only the
+  // dialog panel itself.
   const [formData, setFormData] = useState<FormData>({
     name: '',
     email: '',
@@ -123,11 +126,6 @@ function ContactModal({ onClose }: { onClose: () => void }) {
   const errorInputClass = `${inputBase} border-red-400/60 focus:border-red-400 focus:ring-1 focus:ring-red-300/30`;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ backgroundColor: 'rgba(59,47,42,0.35)', backdropFilter: 'blur(4px)' }}
-      onClick={onClose}
-    >
       <motion.div
         initial={{ y: 60, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
@@ -317,7 +315,6 @@ function ContactModal({ onClose }: { onClose: () => void }) {
           </>
         )}
       </motion.div>
-    </div>
   );
 }
 
@@ -333,10 +330,18 @@ export function ContactProvider({ children }: { children: React.ReactNode }) {
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            key="backdrop"
+            key="contact-overlay"
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+            style={{
+              backgroundColor: 'rgba(59,47,42,0.35)',
+              backdropFilter: 'blur(4px)',
+              isolation: 'isolate',
+              willChange: 'opacity',
+            }}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            onClick={closeContact}
           >
             <ContactModal onClose={closeContact} />
           </motion.div>
