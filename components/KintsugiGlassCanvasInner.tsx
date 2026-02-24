@@ -7,14 +7,19 @@ import * as THREE from 'three';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const SEED = 0xb3ef7a1c;
-const SHARD_INSET = 0.96;   // scale each cell inward to reveal gold seam
-const SHARD_DEPTH = 0.09;   // extrusion thickness (world units)
-const BEVEL_SIZE = 0.006;   // bevel amount to catch light
+const SHARD_INSET = 0.96;         // scale each cell inward to reveal gold seam
+const SHARD_DEPTH = 0.09;         // extrusion thickness (world units)
+const BEVEL_SIZE = 0.006;         // bevel amount to catch light
 const BEVEL_SEGS = 2;
-const SPRING_K = 180;       // spring stiffness
-const SPRING_D = 22;        // spring damping
-const ASSEMBLY_DELAY = 0.6; // seconds before assembly starts
+const SPRING_K = 180;             // spring stiffness
+const SPRING_D = 22;              // spring damping
+const ASSEMBLY_DELAY = 0.6;       // seconds before assembly starts
 const ASSEMBLY_DURATION = 2.2;
+const ASSEMBLED_PARALLAX = 0.04;  // max outward separation when assembled + mouse active
+const MOUSE_PARALLAX_STRENGTH = 0.03; // mouse XY influence on shard displacement
+
+// Type for camera userData injected by MouseTracker
+type CameraWithMouse = THREE.PerspectiveCamera & { userData: { mx?: number; my?: number } };
 
 // ── Seeded PRNG (mulberry32) ──────────────────────────────────────────────────
 function mulberry32(a: number): () => number {
@@ -234,7 +239,7 @@ function CeramicShards({
     const assembledX = new Float32Array(n);
     const assembledY = new Float32Array(n);
     const geometries: (THREE.BufferGeometry | null)[] = [];
-    const rand2 = mulberry32(SEED ^ 0xdeadbeef);
+    
 
     for (let i = 0; i < n; i++) {
       const poly = polys[i];
@@ -278,7 +283,7 @@ function CeramicShards({
 
     const meshRefs: { current: THREE.Mesh | null }[] = Array.from({ length: n }, () => ({ current: null }));
 
-    return { shardData: { n, outX, outY, distFrac, assembledX, assembledY, geometries, rand2 }, meshRefs };
+    return { shardData: { n, outX, outY, distFrac, assembledX, assembledY, geometries }, meshRefs };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vw, vh]);
 
@@ -327,9 +332,10 @@ function CeramicShards({
     // Scroll: rotate whole group + separate shards
     const scrollSeparate = scroll * 0.18;
 
-    // Mouse interaction: accessed through camera.userData (set by parent)
-    const mouseX: number = (cam as THREE.PerspectiveCamera & { userData: { mx?: number; my?: number } }).userData.mx ?? 0;
-    const mouseY: number = (cam as THREE.PerspectiveCamera & { userData: { mx?: number; my?: number } }).userData.my ?? 0;
+    // Mouse interaction: accessed through camera.userData (set by MouseTracker)
+    const camWithMouse = cam as CameraWithMouse;
+    const mouseX: number = camWithMouse.userData.mx ?? 0;
+    const mouseY: number = camWithMouse.userData.my ?? 0;
 
     const { n, outX, outY, distFrac } = shardData;
 
@@ -338,9 +344,11 @@ function CeramicShards({
       if (!mesh) continue;
 
       // Mouse parallax: shards near pointer push apart slightly
-      const parallaxAmt = distFrac[i] * (assembledRef.current ? 0.04 : 0) + scrollSeparate * distFrac[i];
-      const targetX = outX[i] * parallaxAmt * vw - mouseX * distFrac[i] * 0.03 * vw;
-      const targetY = outY[i] * parallaxAmt * vh + mouseY * distFrac[i] * 0.03 * vh;
+      const parallaxAmt =
+        distFrac[i] * (assembledRef.current ? ASSEMBLED_PARALLAX : 0) +
+        scrollSeparate * distFrac[i];
+      const targetX = outX[i] * parallaxAmt * vw - mouseX * distFrac[i] * MOUSE_PARALLAX_STRENGTH * vw;
+      const targetY = outY[i] * parallaxAmt * vh + mouseY * distFrac[i] * MOUSE_PARALLAX_STRENGTH * vh;
       const targetZ = 0;
 
       // Only spring toward assembled position after delay
@@ -467,7 +475,7 @@ function MouseTracker() {
     const alpha = 1 - Math.pow(0.92, dt / 0.016);
     smoothMx.current += (rawMx.current - smoothMx.current) * alpha;
     smoothMy.current += (rawMy.current - smoothMy.current) * alpha;
-    const cam = camera as THREE.PerspectiveCamera & { userData: { mx?: number; my?: number } };
+    const cam = camera as CameraWithMouse;
     cam.userData.mx = smoothMx.current;
     cam.userData.my = smoothMy.current;
   });
