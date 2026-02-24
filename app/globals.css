@@ -35,3 +35,35 @@ select option {
     scroll-behavior: auto;
   }
 }
+
+/* ── Kintsugi shimmer sweep ──────────────────────────────────────────────────
+   A faint diagonal light band slowly traverses the hero cracks.
+   Intensity:  change the rgba alpha value in the gradient below (default 0.18).
+   Speed:      change animation-duration below (default 9s).
+   Mix-blend-mode: screen creates a subtle gleam on the gold without
+   visibly affecting the cream background.
+   Disabled entirely for prefers-reduced-motion.                             */
+@keyframes kintsugi-shimmer {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.kintsugi-shimmer {
+  background: linear-gradient(
+    108deg,
+    transparent 0%,
+    transparent 42%,
+    rgba(255, 252, 228, 0.18) 50%,
+    transparent 58%,
+    transparent 100%
+  );
+  mix-blend-mode: screen;
+  animation: kintsugi-shimmer 9s linear infinite;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kintsugi-shimmer {
+    animation: none;
+  }
+}
