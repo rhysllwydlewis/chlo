@@ -38,12 +38,12 @@ export default function About() {
           transition={{ duration: 0.8 }}
           className="max-w-2xl"
         >
-          <p className="text-xs uppercase tracking-[0.3em] text-chlo-muted mb-4">About</p>
+          <p className="text-xs uppercase tracking-[0.3em] text-chlo-tan mb-4">About</p>
           <h2
             className="text-4xl md:text-5xl font-bold text-chlo-brown leading-tight"
             style={{ fontFamily: 'var(--font-playfair)' }}
           >
-            About Chlo
+            Built with intention
           </h2>
           <p className="text-base text-chlo-muted mt-6 leading-relaxed">
             Chlo is a home for modern brands — a curated group of digital and lifestyle
@@ -58,10 +58,10 @@ export default function About() {
               key={card.label}
               initial={{ y: 40, opacity: 0 }}
               whileInView={{ y: 0, opacity: 1 }}
-              viewport={{ once: true, amount: 0.3 }}
-              transition={{ duration: 0.8, delay: card.delay }}
-              whileHover={{ y: -4, transition: { duration: 0.25 } }}
-              className="rounded-xl p-8 cursor-default transition-shadow duration-300 hover:shadow-md"
+              viewport={{ once: true, amount: 0.2 }}
+              transition={{ duration: 0.7, delay: card.delay, ease: [0.25, 0.46, 0.45, 0.94] }}
+              whileHover={{ y: -5, transition: { duration: 0.22 } }}
+              className="rounded-2xl p-8 cursor-default transition-shadow duration-300 hover:shadow-lg"
               style={{
                 backgroundColor: '#FFFCF7',
                 border: '1px solid #E7D8C6',
@@ -73,7 +73,8 @@ export default function About() {
               >
                 {card.label}
               </p>
-              <p className="text-sm text-chlo-muted mt-4 leading-relaxed">
+              <div className="w-8 h-px mt-4 mb-4" style={{ backgroundColor: '#C9A983' }} />
+              <p className="text-sm text-chlo-muted leading-relaxed">
                 {card.description}
               </p>
             </motion.div>

@@ -42,8 +42,16 @@ select option {
   100% { transform: translateX(100%); }
 }
 
+/* Smooth section-to-section transitions */
+section {
+  transition: background-color 0.4s ease;
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
+  }
+  section {
+    transition: none;
   }
 }

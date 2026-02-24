@@ -47,7 +47,10 @@ export default function Hero() {
           animate={{ y: 0, opacity: 1 }}
           transition={{ duration: 1, delay: 0.25 }}
           className="text-7xl sm:text-8xl md:text-[10rem] font-bold tracking-[-0.02em] text-chlo-brown leading-none"
-          style={{ fontFamily: 'var(--font-playfair)' }}
+          style={{
+            fontFamily: 'var(--font-playfair)',
+            textShadow: '0 2px 24px rgba(247,241,231,0.7), 0 1px 3px rgba(59,47,42,0.08)',
+          }}
         >
           Chlo
         </motion.h1>
@@ -56,7 +59,7 @@ export default function Hero() {
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ duration: 0.9, delay: 0.55 }}
-          className="text-xl md:text-2xl text-chlo-muted font-light mt-8 tracking-wide"
+          className="text-xl md:text-2xl text-chlo-brown/75 font-light mt-8 tracking-wide"
           style={{ fontFamily: 'var(--font-playfair)', fontStyle: 'italic' }}
         >
           Curated experiences, crafted with care.
@@ -81,7 +84,7 @@ export default function Hero() {
           <button
             type="button"
             onClick={openContact}
-            className="px-8 py-3.5 rounded-full text-sm font-medium tracking-wide transition-all duration-200 hover:opacity-80"
+            className="px-8 py-3.5 rounded-full text-sm font-medium tracking-wide transition-all duration-200 hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-chlo-tan focus-visible:ring-offset-2 focus-visible:ring-offset-chlo-cream"
             style={{ backgroundColor: '#3B2F2A', color: '#FFFCF7' }}
           >
             Contact
@@ -89,7 +92,7 @@ export default function Hero() {
           <button
             type="button"
             onClick={handleExploreClick}
-            className="px-8 py-3.5 rounded-full text-sm font-medium tracking-wide border transition-all duration-200 hover:bg-chlo-beige"
+            className="px-8 py-3.5 rounded-full text-sm font-medium tracking-wide border transition-all duration-200 hover:bg-chlo-beige focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-chlo-tan focus-visible:ring-offset-2 focus-visible:ring-offset-chlo-cream"
             style={{ borderColor: '#3B2F2A', color: '#3B2F2A' }}
           >
             Explore
@@ -99,7 +102,7 @@ export default function Hero() {
 
       <motion.div
         initial={{ opacity: 0 }}
-        animate={{ opacity: 0.4 }}
+        animate={{ opacity: 0.55 }}
         transition={{ duration: 1, delay: 1.8 }}
         className="absolute bottom-8 left-1/2 -translate-x-1/2 text-chlo-muted"
         aria-hidden="true"

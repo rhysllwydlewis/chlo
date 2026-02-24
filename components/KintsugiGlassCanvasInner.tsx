@@ -170,6 +170,7 @@ varying vec3 vNormal;
 varying vec3 vWorldPos;
 uniform float uTime;
 uniform vec3 uCamPos;
+uniform float uOpacity;
 
 void main(){
   // Animated noise for molten-gold texture (slow, subtle movement)
@@ -195,7 +196,7 @@ void main(){
   // Very subtle self-emission — avoids flat appearance without overbrightening
   color *= 1.04 + noise * 0.07;
 
-  gl_FragColor = vec4(color, 1.0);
+  gl_FragColor = vec4(color, uOpacity);
 }
 `;
 
@@ -414,18 +415,19 @@ function GoldSeamPlane({ scrollY }: { scrollY: React.MutableRefObject<number> })
     if (matRef.current) {
       matRef.current.uniforms.uTime.value += dt;
       matRef.current.uniforms.uCamPos.value.copy(camera.position);
+      // Drive fade via shader uniform so it actually works on ShaderMaterial
+      matRef.current.uniforms.uOpacity.value = Math.max(0, 1 - scrollY.current * 1.6);
     }
-      if (meshRef.current) {
-        meshRef.current.rotation.y = scrollY.current * 0.4;
-        const mat = meshRef.current.material as THREE.ShaderMaterial;
-        mat.opacity = Math.max(0, 1 - scrollY.current * 1.6);
-      }
+    if (meshRef.current) {
+      meshRef.current.rotation.y = scrollY.current * 0.4;
+    }
   });
 
   const uniforms = useMemo(
     () => ({
       uTime: { value: 0 },
       uCamPos: { value: new THREE.Vector3() },
+      uOpacity: { value: 1 },
     }),
     [],
   );
@@ -439,6 +441,7 @@ function GoldSeamPlane({ scrollY }: { scrollY: React.MutableRefObject<number> })
         fragmentShader={goldFrag}
         uniforms={uniforms}
         transparent
+        depthWrite={false}
       />
     </mesh>
   );
