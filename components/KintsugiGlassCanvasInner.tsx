@@ -2,7 +2,7 @@
 
 import { useRef, useMemo, useEffect } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
-import { EffectComposer, Bloom, DepthOfField, Vignette } from '@react-three/postprocessing';
+import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
 import * as THREE from 'three';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -170,32 +170,33 @@ varying vec3 vNormal;
 varying vec3 vWorldPos;
 uniform float uTime;
 uniform vec3 uCamPos;
+uniform float uOpacity;
 
 void main(){
-  // Animated noise for molten-gold texture
-  float n1 = snoise(vWorldPos.xy * 4.0 + vec2(uTime * 0.28, uTime * 0.11));
-  float n2 = snoise(vWorldPos.xy * 11.0 - vec2(uTime * 0.17, uTime * 0.31));
+  // Animated noise for molten-gold texture (slow, subtle movement)
+  float n1 = snoise(vWorldPos.xy * 3.5 + vec2(uTime * 0.18, uTime * 0.08));
+  float n2 = snoise(vWorldPos.xy * 9.0  - vec2(uTime * 0.12, uTime * 0.22));
   float noise = n1 * 0.65 + n2 * 0.35;
 
-  // Fresnel
+  // Fresnel — controls edge brightness
   vec3 viewDir = normalize(uCamPos - vWorldPos);
   float NdotV  = max(dot(normalize(vNormal), viewDir), 0.0);
-  float fresnel = pow(1.0 - NdotV, 3.0);
+  float fresnel = pow(1.0 - NdotV, 3.5);
 
-  // Warm gold palette
-  vec3 cDark  = vec3(0.64, 0.49, 0.29);
-  vec3 cMid   = vec3(0.82, 0.68, 0.45);
-  vec3 cLight = vec3(0.96, 0.91, 0.80);
+  // Refined gold palette — richer darks, less washed-out lights
+  vec3 cDark  = vec3(0.55, 0.40, 0.20);
+  vec3 cMid   = vec3(0.76, 0.60, 0.36);
+  vec3 cLight = vec3(0.90, 0.82, 0.62);
   float t = clamp((noise + 1.0) * 0.5, 0.0, 1.0);
   vec3 color  = (t < 0.5) ? mix(cDark, cMid, t*2.0) : mix(cMid, cLight, (t-0.5)*2.0);
 
-  // Fresnel rim brightens to near-white
-  color = mix(color, vec3(1.0, 0.96, 0.82), fresnel * 0.72);
+  // Fresnel rim — subtle brightening, not blown-out white
+  color = mix(color, vec3(0.97, 0.90, 0.72), fresnel * 0.42);
 
-  // Subtle self-emission to simulate inner glow
-  color *= 1.15 + noise * 0.22;
+  // Very subtle self-emission — avoids flat appearance without overbrightening
+  color *= 1.04 + noise * 0.07;
 
-  gl_FragColor = vec4(color, 1.0);
+  gl_FragColor = vec4(color, uOpacity);
 }
 `;
 
@@ -374,14 +375,14 @@ function CeramicShards({
   const material = useMemo(
     () =>
       new THREE.MeshPhysicalMaterial({
-        color: new THREE.Color('#F5EDDF'),
-        roughness: 0.35,
+        color: new THREE.Color('#F0E8D8'),
+        roughness: 0.42,
         metalness: 0.0,
-        clearcoat: 0.85,
-        clearcoatRoughness: 0.12,
+        clearcoat: 0.55,
+        clearcoatRoughness: 0.18,
         bumpMap: bumpTex,
-        bumpScale: 0.004,
-        envMapIntensity: 0.7,
+        bumpScale: 0.003,
+        envMapIntensity: 0.55,
       }),
     [bumpTex],
   );
@@ -414,18 +415,19 @@ function GoldSeamPlane({ scrollY }: { scrollY: React.MutableRefObject<number> })
     if (matRef.current) {
       matRef.current.uniforms.uTime.value += dt;
       matRef.current.uniforms.uCamPos.value.copy(camera.position);
+      // Drive fade via shader uniform so it actually works on ShaderMaterial
+      matRef.current.uniforms.uOpacity.value = Math.max(0, 1 - scrollY.current * 1.6);
     }
-      if (meshRef.current) {
-        meshRef.current.rotation.y = scrollY.current * 0.4;
-        const mat = meshRef.current.material as THREE.ShaderMaterial;
-        mat.opacity = Math.max(0, 1 - scrollY.current * 1.6);
-      }
+    if (meshRef.current) {
+      meshRef.current.rotation.y = scrollY.current * 0.4;
+    }
   });
 
   const uniforms = useMemo(
     () => ({
       uTime: { value: 0 },
       uCamPos: { value: new THREE.Vector3() },
+      uOpacity: { value: 1 },
     }),
     [],
   );
@@ -439,6 +441,7 @@ function GoldSeamPlane({ scrollY }: { scrollY: React.MutableRefObject<number> })
         fragmentShader={goldFrag}
         uniforms={uniforms}
         transparent
+        depthWrite={false}
       />
     </mesh>
   );
@@ -473,25 +476,24 @@ function MouseTracker() {
   return null;
 }
 
-// ── Inline environment map (warm sunset gradient, no network required) ────────
+// ── Inline environment map (neutral studio gradient, no network required) ─────
 function InlineEnvironment() {
   const { gl, scene } = useThree();
 
   useEffect(() => {
-    // Build a simple 2x1 pixel CubeTexture from warm/cool colour pairs
     const pmrem = new THREE.PMREMGenerator(gl);
     pmrem.compileEquirectangularShader();
 
-    // Create a small gradient DataTexture as the equirectangular map
+    // Neutral-warm studio environment: soft blue-grey sky → cream horizon → warm ground
     const W = 64, H = 32;
     const data = new Uint8Array(W * H * 4);
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
         const t = y / (H - 1); // 0 = sky top, 1 = ground bottom
-        // Sky: soft warm gold; horizon: cream; ground: muted brown
-        const r = Math.round(lerp(lerp(240, 247, t), lerp(120, 80, t), Math.max(0, t * 2 - 1)));
-        const g = Math.round(lerp(lerp(200, 235, t), lerp(100, 60, t), Math.max(0, t * 2 - 1)));
-        const b = Math.round(lerp(lerp(120, 210, t), lerp(70, 40, t), Math.max(0, t * 2 - 1)));
+        // Sky: cool neutral; horizon: soft cream; ground: muted warm grey
+        const r = Math.round(lerp(lerp(210, 240, t), lerp(110, 80, t), Math.max(0, t * 2 - 1)));
+        const g = Math.round(lerp(lerp(210, 232, t), lerp(95, 65, t), Math.max(0, t * 2 - 1)));
+        const b = Math.round(lerp(lerp(228, 215, t), lerp(80, 55, t), Math.max(0, t * 2 - 1)));
         const idx = (y * W + x) * 4;
         data[idx] = r; data[idx + 1] = g; data[idx + 2] = b; data[idx + 3] = 255;
       }
@@ -516,22 +518,22 @@ function InlineEnvironment() {
 function lerp(a: number, b: number, t: number) { return a + (b - a) * t; }
 
 // ── Post-processing ───────────────────────────────────────────────────────────
+// Tunables — adjust here for design iteration:
+const BLOOM_INTENSITY = 0.18;         // subtle glow only on brightest highlights
+const BLOOM_THRESHOLD = 0.84;         // only very bright surfaces trigger bloom
+const BLOOM_SMOOTHING = 0.06;
+const VIGNETTE_DARKNESS = 0.32;       // gentle frame, not oppressive
+
 function PostProcessing() {
   return (
     <EffectComposer>
-      <DepthOfField
-        focusDistance={0.01}
-        focalLength={0.04}
-        bokehScale={2.5}
-        height={600}
-      />
       <Bloom
-        intensity={0.55}
-        luminanceThreshold={0.62}
-        luminanceSmoothing={0.08}
+        intensity={BLOOM_INTENSITY}
+        luminanceThreshold={BLOOM_THRESHOLD}
+        luminanceSmoothing={BLOOM_SMOOTHING}
         mipmapBlur
       />
-      <Vignette eskil={false} offset={0.3} darkness={0.6} />
+      <Vignette eskil={false} offset={0.35} darkness={VIGNETTE_DARKNESS} />
     </EffectComposer>
   );
 }
@@ -548,20 +550,30 @@ export default function KintsugiGlassCanvasInner({
     <>
       <MouseTracker />
 
-      {/* Lighting */}
-      <ambientLight intensity={0.45} color="#FFF8EF" />
+      {/* Lighting — key / fill / rim / ambient */}
+      {/* Ambient: lower intensity to allow lights to define shape */}
+      <ambientLight intensity={0.28} color="#F8F2EA" />
+      {/* Key light: warm, slightly above-right */}
       <directionalLight
         position={[3, 5, 4]}
-        intensity={1.1}
-        color="#FFF6E8"
+        intensity={0.95}
+        color="#FFF4E0"
         castShadow
       />
+      {/* Fill light: cool-neutral, opposite side */}
       <directionalLight
-        position={[-4, -2, 2]}
-        intensity={0.3}
-        color="#C8D4E8"
+        position={[-4, -1, 2]}
+        intensity={0.22}
+        color="#D4DDE8"
       />
-      <pointLight position={[0, 0, 2.5]} intensity={0.5} color="#FFE8C0" />
+      {/* Rim light: from behind to separate shards from background */}
+      <directionalLight
+        position={[0, -3, -3]}
+        intensity={0.18}
+        color="#E8E0D4"
+      />
+      {/* Subtle point light near camera for soft specular highlights */}
+      <pointLight position={[0, 0, 2.5]} intensity={0.28} color="#FFE4B0" />
 
       {/* Inline HDRI-style environment (warm sunset, no network fetch) */}
       <InlineEnvironment />
