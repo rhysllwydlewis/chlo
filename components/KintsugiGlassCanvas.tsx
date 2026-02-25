@@ -14,6 +14,8 @@ const SHIMMER_SPEED = 2.2;
 const SHIMMER_PHASE_A = 0.137;
 const SHIMMER_PHASE_B = 0.073;
 const SHIMMER_AMPLITUDE = 0.3;
+const PHASE_DELTA_THRESHOLD = 0.0005;
+const PTR_DELTA_THRESHOLD = 0.5;
 
 // ── Seeded PRNG (mulberry32) ──────────────────────────────────────────────────
 function mulberry32(a: number): () => number {
@@ -483,6 +485,9 @@ export default function KintsugiGlassCanvas() {
   const smoothPtrRef = useRef({ x: 0, y: 0 });
   const isOnScreenRef = useRef(false);
   const reducedMotionRef = useRef(false);
+  const lastDrawTimeRef = useRef<number | null>(null);
+  const lastDrawPhaseRef = useRef(0);
+  const lastDrawPtrRef = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -493,6 +498,9 @@ export default function KintsugiGlassCanvas() {
     if (!ctx) return;
 
     reducedMotionRef.current = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    const isMobile = 'ontouchstart' in window || window.matchMedia('(pointer: coarse)').matches;
+    const targetFrameMs = isMobile ? 1000 / 30 : 1000 / 60;
 
     // Build the noise texture once — it is stable for the lifetime of the component
     noiseTexRef.current = buildNoiseTexture();
@@ -560,12 +568,24 @@ export default function KintsugiGlassCanvas() {
       sp.x += (tp.x - sp.x) * alpha;
       sp.y += (tp.y - sp.y) * alpha;
 
-      const { w, h } = sizeRef.current;
-      const fr = fractureRef.current;
-      const nt = noiseTexRef.current;
-      const sg = staticGradsRef.current;
-      if (fr && nt && sg) {
-        drawScene(ctx!, fr, sg, w, h, phase, sp.x, sp.y, elapsed);
+      // FPS throttle: skip draw if not enough time has passed since last draw
+      const sinceLastDraw = lastDrawTimeRef.current === null ? Infinity : time - lastDrawTimeRef.current;
+      if (sinceLastDraw >= targetFrameMs) {
+        const phaseDelta = Math.abs(phase - lastDrawPhaseRef.current);
+        const lpx = lastDrawPtrRef.current.x;
+        const lpy = lastDrawPtrRef.current.y;
+        if (phaseDelta > PHASE_DELTA_THRESHOLD || Math.abs(sp.x - lpx) > PTR_DELTA_THRESHOLD || Math.abs(sp.y - lpy) > PTR_DELTA_THRESHOLD) {
+          const { w, h } = sizeRef.current;
+          const fr = fractureRef.current;
+          const nt = noiseTexRef.current;
+          const sg = staticGradsRef.current;
+          if (fr && nt && sg) {
+            drawScene(ctx!, fr, sg, w, h, phase, sp.x, sp.y, elapsed);
+            lastDrawTimeRef.current = time;
+            lastDrawPhaseRef.current = phase;
+            lastDrawPtrRef.current = { x: sp.x, y: sp.y };
+          }
+        }
       }
 
       rafRef.current = requestAnimationFrame(loop);
@@ -592,6 +612,7 @@ export default function KintsugiGlassCanvas() {
 
     // ── Pointer / touch tracking ────────────────────────────────────────────
     // Listen on window so events reach even with pointer-events:none on canvas
+    // Skip listeners entirely when reduced motion is active (static frame, no parallax)
     function onPointerMove(e: PointerEvent) {
       const rect = container!.getBoundingClientRect();
       ptrRef.current = {
@@ -608,8 +629,10 @@ export default function KintsugiGlassCanvas() {
         };
       }
     }
-    window.addEventListener('pointermove', onPointerMove);
-    window.addEventListener('touchmove', onTouchMove, { passive: true });
+    if (!reducedMotionRef.current) {
+      window.addEventListener('pointermove', onPointerMove, { passive: true });
+      window.addEventListener('touchmove', onTouchMove, { passive: true });
+    }
 
     // ── ResizeObserver ──────────────────────────────────────────────────────
     const resizeObserver = new ResizeObserver(() => {
@@ -644,13 +667,15 @@ export default function KintsugiGlassCanvas() {
       resizeObserver.disconnect();
       intersectionObserver.disconnect();
       document.removeEventListener('visibilitychange', onVisibilityChange);
-      window.removeEventListener('pointermove', onPointerMove);
-      window.removeEventListener('touchmove', onTouchMove);
+      if (!reducedMotionRef.current) {
+        window.removeEventListener('pointermove', onPointerMove);
+        window.removeEventListener('touchmove', onTouchMove);
+      }
     };
   }, []);
 
   return (
-    <div ref={containerRef} className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
+    <div ref={containerRef} className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true" style={{ willChange: 'transform' }}>
       <canvas ref={canvasRef} className="absolute inset-0" />
     </div>
   );
